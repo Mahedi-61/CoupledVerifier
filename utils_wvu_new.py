@@ -3,7 +3,6 @@ from torchvision.utils import save_image
 import torch 
 import config 
 import os 
-from PIL import Image
 from sklearn import metrics
 import numpy as np 
 
@@ -64,7 +63,7 @@ def save_model(net_photo, net_print, optimizer_G, disc_photo, disc_print, epoch,
 
 
 # loading images in a dictionary
-def get_one_img_dict(photo_path, print_path):
+def get_img_dict(photo_path, print_path):
     photo_finger_dict = {}
     print_finger_dict = {}
 
@@ -74,8 +73,7 @@ def get_one_img_dict(photo_path, print_path):
         
         for img_file in os.listdir(sub_dir):
             finger_id = img_file.split(".")[0]
-            photo_finger_dict[index] = [finger_id, Image.open(
-                        os.path.join(sub_dir, img_file)).convert("L")] 
+            photo_finger_dict[index] = [finger_id, os.path.join(sub_dir, img_file)] 
 
             index += 1
 
@@ -85,10 +83,8 @@ def get_one_img_dict(photo_path, print_path):
         if(os.path.isdir(sub_dir)):
             for img_file in os.listdir(sub_dir):
                 finger_id = img_file.split(".")[0]
-                print_finger_dict[finger_id] = Image.open(
-                        os.path.join(sub_dir, img_file)).convert("L")
+                print_finger_dict[finger_id] = os.path.join(sub_dir, img_file)
 
-    
     return photo_finger_dict, print_finger_dict
 
 
@@ -103,8 +99,7 @@ def get_two_img_dict(photo_path, print_path, fnums):
         first_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
         second_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
 
-        photo_finger_dict[index] = [sub_id, [Image.open(first_finger_dir).convert("L"), 
-                                    Image.open(second_finger_dir).convert("L")]] 
+        photo_finger_dict[index] = [sub_id, [first_finger_dir, second_finger_dir]] 
 
         index += 1
 
@@ -114,33 +109,26 @@ def get_two_img_dict(photo_path, print_path, fnums):
             first_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
             second_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
 
-            print_finger_dict[sub_id] = [Image.open(first_finger_dir).convert("L"), 
-                                        Image.open(second_finger_dir).convert("L")] 
+            print_finger_dict[sub_id] = [first_finger_dir, second_finger_dir] 
 
+    print("Joint Fingers ID: ", fnums)
+    print("Number of Data: ", len(photo_finger_dict))
     return photo_finger_dict, print_finger_dict
 
 
 
-def load_checkpoint():
-    print("loading saved model")
-    checkpoint = torch.load(config.loaded_model_file)
+def load_one_checkpoint():
+    loaded_model_file = os.path.join(config.weights_one_dir, 
+                                    "best_model_000.pth")
+    checkpoint = torch.load(loaded_model_file)
     return checkpoint
 
+def load_two_checkpoint():
+    loaded_model_file = os.path.join(config.weights_two_dir, 
+                                    "model_res18_m75_270_f.pth")
+    checkpoint = torch.load(loaded_model_file)
+    return checkpoint
 
-def load_all_checkpoints():
-    print("loading all models")
-    checkpoints = []
-    models = []
-    all_models = sorted(os.listdir(config.weights_dir), 
-            key= lambda x: int((x.split("_")[-1]).split(".")[0]))  
-
-    for model in all_models:
-        model_file = os.path.join(config.weights_dir, model)
-        models.append(model)
-        checkpoints.append(torch.load(model_file))
-    
-    return checkpoints, models
-    
 
 # calculating scores 
 def calculate_scores(ls_labels, ls_sq_dist):
@@ -154,7 +142,7 @@ def calculate_scores(ls_labels, ls_sq_dist):
     eer = fprs[np.nanargmin(np.absolute((1 - tprs) - fprs))]
     auc = metrics.auc(fprs, tprs)
 
-    print("AUC {} | EER {}".format(auc, eer))
+    print("AUC {:.4f} | EER {:.4f}".format(auc, eer))
     #np.save("%s/lbl_test.npy" %(config.saved_data_dir), true_label)
     #np.save("%s/dist_test.npy" %(config.saved_data_dir), pred_ls)
 
@@ -163,6 +151,6 @@ if __name__ == "__main__":
     #t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
     phdict, prdict =  get_two_img_dict(config.train_photo_dir, 
-                            config.train_print_dir, ["7", "8"]) 
+                            config.train_print_dir, config.fnums) 
     
     print(prdict["6664111"])

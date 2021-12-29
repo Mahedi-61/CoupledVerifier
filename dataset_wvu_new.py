@@ -1,21 +1,21 @@
 import  random
-from matplotlib.pyplot import fill  
 import numpy as np 
 import os 
+from PIL import Image 
 from torch.utils.data import Dataset 
 from torchvision import transforms 
 import config
 import utils_wvu_new 
 import torch 
 
-class WVUNewVerifierOne(Dataset):
+class WVUNewVerifier(Dataset):
     def __init__(self, train = True):
         super().__init__()
         self.train = train
         if self.train == True:
-            print("trainning phase ...")
+            print("train data loading ...")
             if config.num_join_fingers == 1:
-                self.dict_photo, self.dict_print = utils_wvu_new.get_one_img_dict(
+                self.dict_photo, self.dict_print = utils_wvu_new.get_img_dict(
                            config.train_photo_dir, config.train_print_dir)
 
             elif config.num_join_fingers == 2:
@@ -24,9 +24,9 @@ class WVUNewVerifierOne(Dataset):
 
 
         elif self.train == False:
-            print("testing phase ...")
+            print("validation data loading ...")
             if config.num_join_fingers == 1:
-                self.dict_photo, self.dict_print = utils_wvu_new.get_one_img_dict(
+                self.dict_photo, self.dict_print = utils_wvu_new.get_img_dict(
                            config.test_photo_dir, config.test_print_dir)
 
             elif config.num_join_fingers == 2:
@@ -80,13 +80,19 @@ class WVUNewVerifierOne(Dataset):
                                             len(self.dict_print) - 1)]  
 
         if config.num_join_fingers == 1:
-            img1 = self.trans(photo_image)
-            img2 = self.trans(self.dict_print[class_id])
+            ph_f = Image.open(photo_image).convert("L")
+            pr_f = Image.open(self.dict_print[class_id]).convert("L")
+
+            img1 = self.trans(ph_f)
+            img2 = self.trans(pr_f)
 
         elif config.num_join_fingers == 2:
             print_image = self.dict_print[class_id]
-            ph_f1, ph_f2 = self.trans(photo_image[0]), self.trans(photo_image[1])
-            pr_f1, pr_f2  = self.trans(print_image[0]), self.trans(print_image[1])
+
+            ph_f1 = self.trans(Image.open(photo_image[0]).convert("L")) 
+            ph_f2 = self.trans(Image.open(photo_image[1]).convert("L"))
+            pr_f1 = self.trans(Image.open(print_image[0]).convert("L")) 
+            pr_f2 = self.trans(Image.open(print_image[1]).convert("L"))
 
             if config.join_type == "concat":
                 img1 = torch.cat([ph_f1, ph_f2], dim=2)
@@ -100,7 +106,7 @@ class WVUNewVerifierOne(Dataset):
 
 
 if __name__ == "__main__":
-    data = WVUNewVerifierOne(train = config.is_train)
+    data = WVUNewVerifier(train = config.is_train)
     img1, img2, same_class = data.__getitem__(90)
     print(img1.shape)
     #title = ("genuine pair" if same_class else "imposter pair")

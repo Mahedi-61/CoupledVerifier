@@ -5,7 +5,8 @@ import config
 import os 
 from sklearn import metrics
 import numpy as np 
-
+import math
+irange = range
 
 class AverageMeter():
     def __init__(self):
@@ -44,11 +45,12 @@ def plot_tensors(tensors, title):
     plt.show() 
 
 
-def save_model(net_photo, net_print, optimizer_G, disc_photo, disc_print, epoch, is_best):
+def save_model(net_photo, net_print, fidentity, optimizer_G, disc_photo, disc_print, epoch, is_best):
     checkpoint = {}
 
     checkpoint["net_photo"] = net_photo.state_dict()
     checkpoint["net_print"] = net_print.state_dict()
+    checkpoint["fidentity"] = fidentity.state_dict()
     checkpoint["optimizer_G"] = optimizer_G.state_dict()
     checkpoint["disc_photo"] = disc_photo.state_dict()
     checkpoint["disc_print"] = disc_print.state_dict() 
@@ -59,7 +61,26 @@ def save_model(net_photo, net_print, optimizer_G, disc_photo, disc_print, epoch,
     
     elif is_best == True:
         print("saving best model so far")
-        torch.save(checkpoint, config.best_model + ".pth")
+        torch.save(checkpoint, config.best_model + str(epoch) + ".pth")
+
+
+def save_model_only_encoder(net_print, net_syn_print, optimizer_AE, epoch, is_best):
+    checkpoint = {}
+
+    checkpoint["net_print"] = net_print.state_dict()
+    checkpoint["net_syn_print"] = net_syn_print.state_dict()
+    checkpoint["optimizer_G"] = optimizer_AE.state_dict()
+
+    dir = "F1_D1_A3_final"
+    model_file = os.path.join(config.root_dir, "checkpoints", "wvu_old", dir)
+    best_model = os.path.join(config.root_dir, "checkpoints", "wvu_old", dir)
+    if is_best == False:
+        print("saving model for epoch: ", str(epoch))
+        torch.save(checkpoint, model_file + str(epoch) + ".pth")
+    
+    elif is_best == True:
+        print("saving best model so far")
+        torch.save(checkpoint, best_model + ".pth")
 
 
 # loading images in a dictionary
@@ -89,7 +110,7 @@ def get_img_dict(photo_path, print_path):
     return photo_finger_dict, print_finger_dict
 
 
-def get_two_img_dict(photo_path, print_path, fnums):
+def get_multiple_img_dict(photo_path, print_path, ls_fnums):
     photo_finger_dict = {}
     print_finger_dict = {}
 
@@ -108,39 +129,44 @@ def get_two_img_dict(photo_path, print_path, fnums):
 
     index = 0
     for key in list(all_sub_finger.keys()):
-        if fnums[0] in all_sub_finger[key] and fnums[1] in all_sub_finger[key]:
-            first_finger_dir = os.path.join(photo_path, key + "_" + fnums[0])
-            first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
+        for fnums in ls_fnums:
+            if set(fnums).issubset(set(all_sub_finger[key])):
+                first_finger_dir = os.path.join(photo_path, key + "_" + fnums[0])
+                first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
 
-            second_finger_dir = os.path.join(photo_path, key + "_" + fnums[1])
-            second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
-            photo_finger_dict[index] = [key, [first_finger_img, second_finger_img]]
+                second_finger_dir = os.path.join(photo_path, key + "_" + fnums[1])
+                second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
 
-            # for print
-            first_finger_dir = os.path.join(print_path, key + "_" + fnums[0])
-            first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
+                if config.num_join_fingers == 2:
+                    photo_finger_dict[index] = [key + "_"+  str(index), [first_finger_img, second_finger_img]]
 
-            second_finger_dir = os.path.join(print_path, key + "_" + fnums[1])
-            second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
-            print_finger_dict[key] = [first_finger_img, second_finger_img]
-            index += 1
+                elif config.num_join_fingers == 3:
+                    third_finger_dir = os.path.join(photo_path, key + "_" + fnums[2])
+                    third_finger_img = os.path.join(third_finger_dir, os.listdir(third_finger_dir)[0])
+                    photo_finger_dict[index] = [key + "_"+  str(index), [first_finger_img, 
+                                                                second_finger_img, third_finger_img]] 
 
-    print("Joint Fingers ID: ", fnums)
+                # for print
+                first_finger_dir = os.path.join(print_path, key + "_" + fnums[0])
+                first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
+
+                second_finger_dir = os.path.join(print_path, key + "_" + fnums[1])
+                second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
+
+                if config.num_join_fingers == 2:
+                    print_finger_dict[key + "_"+  str(index)] = [first_finger_img, second_finger_img]
+
+                elif config.num_join_fingers == 3:
+                    third_finger_dir = os.path.join(print_path, key + "_" + fnums[2])
+                    third_finger_img = os.path.join(third_finger_dir, os.listdir(third_finger_dir)[0]) 
+                    print_finger_dict[key + "_"+  str(index)] = [first_finger_img, 
+                                                            second_finger_img, third_finger_img]
+
+                index += 1
+
+    print("Joint Fingers ID: ", ls_fnums)
     print("Number of Data: ", len(photo_finger_dict))
     return photo_finger_dict, print_finger_dict
-
-
-def load_one_checkpoint():
-    loaded_model_file = os.path.join(config.weights_one_dir, 
-                                    "best_model_000.pth")
-    checkpoint = torch.load(loaded_model_file)
-    return checkpoint
-
-def load_two_checkpoint():
-    loaded_model_file = os.path.join(config.weights_two_dir, 
-                                    "model_res18_m75_270_f.pth")
-    checkpoint = torch.load(loaded_model_file)
-    return checkpoint
 
 
 # calculating scores 
@@ -161,9 +187,119 @@ def calculate_scores(ls_labels, ls_sq_dist):
     #np.save("%s/dist_test.npy" %(config.saved_data_dir), pred_ls)
 
 
+
+def make_grid(tensor, nrow=8, padding=2,
+              normalize=False, range=None, scale_each=False, pad_value=0):
+    """Make a grid of images.
+
+    Args:
+        tensor (Tensor or list): 4D mini-batch Tensor of shape (B x C x H x W)
+            or a list of images all of the same size.
+        nrow (int, optional): Number of images displayed in each row of the grid.
+            The final grid size is ``(B / nrow, nrow)``. Default: ``8``.
+        padding (int, optional): amount of padding. Default: ``2``.
+        normalize (bool, optional): If True, shift the image to the range (0, 1),
+            by the min and max values specified by :attr:`range`. Default: ``False``.
+        range (tuple, optional): tuple (min, max) where min and max are numbers,
+            then these numbers are used to normalize the image. By default, min and max
+            are computed from the tensor.
+        scale_each (bool, optional): If ``True``, scale each image in the batch of
+            images separately rather than the (min, max) over all images. Default: ``False``.
+        pad_value (float, optional): Value for the padded pixels. Default: ``0``.
+
+    Example:
+        See this notebook `here <https://gist.github.com/anonymous/bf16430f7750c023141c562f3e9f2a91>`_
+
+    """
+    if not (torch.is_tensor(tensor) or
+            (isinstance(tensor, list) and all(torch.is_tensor(t) for t in tensor))):
+        raise TypeError('tensor or list of tensors expected, got {}'.format(type(tensor)))
+
+    # if list of tensors, convert to a 4D mini-batch Tensor
+    if isinstance(tensor, list):
+        tensor = torch.stack(tensor, dim=0)
+
+    if tensor.dim() == 2:  # single image H x W
+        tensor = tensor.unsqueeze(0)
+    if tensor.dim() == 3:  # single image
+        if tensor.size(0) == 1:  # if single-channel, convert to 3-channel
+            tensor = torch.cat((tensor, tensor, tensor), 0)
+        tensor = tensor.unsqueeze(0)
+
+    if tensor.dim() == 4 and tensor.size(1) == 1:  # single-channel images
+        tensor = torch.cat((tensor, tensor, tensor), 1)
+
+    if normalize is True:
+        tensor = tensor.clone()  # avoid modifying tensor in-place
+        if range is not None:
+            assert isinstance(range, tuple), \
+                "range has to be a tuple (min, max) if specified. min and max are numbers"
+
+        def norm_ip(img, min, max):
+            img.clamp_(min=min, max=max)
+            img.add_(-min).div_(max - min + 1e-5)
+
+        def norm_range(t, range):
+            if range is not None:
+                norm_ip(t, range[0], range[1])
+            else:
+                norm_ip(t, float(t.min()), float(t.max()))
+
+        if scale_each is True:
+            for t in tensor:  # loop over mini-batch dimension
+                norm_range(t, range)
+        else:
+            norm_range(tensor, range)
+
+    if tensor.size(0) == 1:
+        return tensor.squeeze(0)
+
+    # make the mini-batch of images into a grid
+    nmaps = tensor.size(0)
+    xmaps = min(nrow, nmaps)
+    ymaps = int(math.ceil(float(nmaps) / xmaps))
+    height, width = int(tensor.size(2) + padding), int(tensor.size(3) + padding)
+    num_channels = tensor.size(1)
+    grid = tensor.new_full((num_channels, height * ymaps + padding, width * xmaps + padding), pad_value)
+    k = 0
+    for y in irange(ymaps):
+        for x in irange(xmaps):
+            if k >= nmaps:
+                break
+            grid.narrow(1, y * height + padding, height - padding)\
+                .narrow(2, x * width + padding, width - padding)\
+                .copy_(tensor[k])
+            k = k + 1
+    return grid
+
+
+def save_image(tensor, fp, nrow=8, padding=2, normalize=False, range=None, 
+                scale_each=False, pad_value=0, format=None):
+    """Save a given Tensor into an image file.
+
+    Args:
+        tensor (Tensor or list): Image to be saved. If given a mini-batch tensor,
+            saves the tensor as a grid of images by calling ``make_grid``.
+        fp - A filename(string) or file object
+        format(Optional):  If omitted, the format to use is determined from the filename extension.
+            If a file object was used instead of a filename, this parameter should always be used.
+        **kwargs: Other arguments are documented in ``make_grid``.
+    """
+    from PIL import Image
+    grid = make_grid(tensor, nrow=nrow, padding=padding, pad_value=pad_value,
+                     normalize=normalize, range=range, scale_each=scale_each)
+    # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+    ndarr = grid.mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to('cpu', torch.uint8).numpy()
+    im = Image.fromarray(ndarr)
+    im.save(fp, format=format)
+
+
 if __name__ == "__main__":
     t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
 
-    ph_d, pr_d = get_two_img_dict(config.train_photo_dir, 
-                                config.train_print_dir, config.fnums)
+    ph_d, pr_d = get_multiple_img_dict(config.train_photo_dir, 
+                                config.train_print_dir, [["2", "4", "9"]])
+    
+    print(len(ph_d))
+    print(len(pr_d))
