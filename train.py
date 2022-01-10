@@ -12,7 +12,6 @@ from  torch.optim.lr_scheduler import ExponentialLR
 
 class VerifTrain:
     def __init__(self):
-        print("loading dataset ...")
         self.train_loader = DataLoader(
             dataset_wvu_old.WVUOldVerifier(train = config.is_train),
             batch_size=config.batch_size, 
@@ -29,15 +28,16 @@ class VerifTrain:
             num_workers= 6  
         )
 
+        print("Dataset: ", config.dataset_name)
         print("Number of Fingers: ", config.num_join_fingers)
-        print("Join Type: ", config.join_type)
         print("Network Arch:", config.w_name.split("_")[-1])
+        print("Savging model in: ", config.w_name)
         
-        self.net_photo, self.net_print = get_model(config.w_name)
+        self.net_photo, self.net_print = get_model(config.w_name, img_dim=config.img_dim)
         self.net_photo.train()
         self.net_print.train()
 
-        self.disc_photo, self.disc_print = get_discriminator()
+        self.disc_photo, self.disc_print = get_discriminator(img_dim=config.img_dim)
         self.disc_photo.train()
         self.disc_print.train()
 
@@ -53,12 +53,21 @@ class VerifTrain:
         self.criterion =  torch.nn.BCEWithLogitsLoss()
         self.iter = 0
 
-        self.optimizer_G = torch.optim.Adam(
-            list(self.net_photo.parameters()) + 
-                list(self.net_print.parameters()) + 
-                list(self.fidentity.parameters()), 
-            lr = config.learning_rate,
-            weight_decay = config.weight_decay)
+        if config.partial_finetune == False:
+            self.optimizer_G = torch.optim.Adam(
+                list(self.net_photo.parameters()) + 
+                    list(self.net_print.parameters()) + 
+                    list(self.fidentity.parameters()), 
+                lr = config.learning_rate,
+                weight_decay = config.weight_decay)
+
+        else:
+            print("Identity loss is not calculating ...")
+            self.optimizer_G = torch.optim.Adam(
+                list(filter(lambda p: p.requires_grad, self.net_photo.parameters())) + 
+                list(filter(lambda p: p.requires_grad, self.net_print.parameters())), 
+                lr = config.learning_rate,
+                weight_decay = config.weight_decay)
 
     
         self.optimizer_D = torch.optim.Adam(
@@ -71,7 +80,8 @@ class VerifTrain:
         if config.is_load_model:
             print("loading pretrained model ...")
             load_saved_model_for_finetuing(self.net_photo, self.net_print, 
-                        self.disc_photo, self.disc_print, is_disc_load=True) 
+                                    self.disc_photo, self.disc_print, 
+                                    is_disc_load=True, partial_finetune=config.partial_finetune) 
 
 
     def validate(self):
@@ -88,6 +98,7 @@ class VerifTrain:
                 img_photo = img_photo.to(config.device)
                 img_print = img_print.to(config.device)
                 label = label.to(config.device)
+                #plot_tensors([img_photo[2], img_print[2]], title="check")
 
                 _, embd_photo = self.net_photo(img_photo)
                 _, embd_print = self.net_print(img_print)
@@ -96,7 +107,7 @@ class VerifTrain:
                 ls_sq_dist.append(dist_sq.data)
                 ls_labels.append((1 - label).data)
 
-        auc, eer = calculate_scores(ls_labels, ls_sq_dist)
+        auc, eer =  calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
         self.net_photo.train()
         self.net_print.train() 
         return auc, eer
@@ -164,7 +175,11 @@ class VerifTrain:
         #identity loss
         out = self.fidentity(embd_photo, embd_print)
         out = torch.squeeze(out, dim=1)
-        id_loss = self.criterion(out, label)
+
+        if config.partial_finetune == False:
+            id_loss = self.criterion(out, label)
+        else:
+            id_loss = 0.0
 
         G_loss =  (con_loss + gan_loss*config.delta_gan + 
                             l2_loss*config.delta_l2 + id_loss)
@@ -210,15 +225,22 @@ class VerifTrain:
                 acc_m.update(acc.mean())
 
                 # discriminator 
-                self.optimizer_D.zero_grad()
-                D_loss = self.backward_D(img_photo, img_print, valid, fake)
-                self.optimizer_D.step() 
+                if config.partial_finetune == False: 
+                    self.optimizer_D.zero_grad()
+                    D_loss = self.backward_D(img_photo, img_print, valid, fake)
+                    self.optimizer_D.step() 
 
                 loss_m_g.update(G_loss.item())
                 ls_con.update(con_loss.item())
                 ls_l2.update(l2_loss.item())
-                ls_id.update(id_loss.item())
-                loss_m_d.update(D_loss.item())
+
+                if config.partial_finetune == False: 
+                    ls_id.update(id_loss.item())
+                else:
+                    ls_id.update(id_loss)
+
+                if config.partial_finetune == False: loss_m_d.update(D_loss.item())
+                else: loss_m_d.update(0.00)
    
 
             # at the end of each epoch 
@@ -232,7 +254,7 @@ class VerifTrain:
             
             if (config.is_save_model and epoch >= config.start_saving_epoch):
                 auc, eer = self.validate() 
-                saving_auc = 0.980
+                saving_auc = 0.97
 
                 if (auc > saving_auc):
                     save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
@@ -249,4 +271,4 @@ class VerifTrain:
 
 if __name__ == "__main__":
     t = VerifTrain()
-    t.train() 
+    t.train()

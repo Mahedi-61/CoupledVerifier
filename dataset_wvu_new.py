@@ -7,71 +7,110 @@ from torchvision import transforms
 import config
 import utils_wvu_new 
 import torch 
+import torchvision.transforms.functional as TF
+
 
 class WVUNewVerifier(Dataset):
     def __init__(self, train = True):
         super().__init__()
         self.train = train
-        if self.train == True:
-            print("train data loading ...")
-            if config.num_join_fingers == 1:
+
+        if (self.train == True): 
+            print("trainning data loading")
+            if config.num_join_fingers == 1 and config.is_one_fid == False:
                 self.dict_photo, self.dict_print = utils_wvu_new.get_img_dict(
-                           config.train_photo_dir, config.train_print_dir)
+                    config.train_photo_dir, config.train_print_dir)
+            
+            elif config.num_join_fingers >= 2 or config.is_one_fid == True:
+                if (config.is_all_pairs == True): ls_fnums = config.all_fnums
+                else: ls_fnums = config.fnums
 
-            elif config.num_join_fingers == 2:
-                self.dict_photo, self.dict_print = utils_wvu_new.get_two_img_dict(
-                        config.train_photo_dir, config.train_print_dir, config.fnums)
+                self.dict_photo, self.dict_print = utils_wvu_new.get_multiple_img_dict(
+                    config.train_photo_dir, config.train_print_dir, ls_fnums)
 
-
-        elif self.train == False:
-            print("validation data loading ...")
-            if config.num_join_fingers == 1:
+        elif(self.train == False):
+            print("\nvalidation data loading ...")
+            if config.num_join_fingers == 1 and config.is_one_fid == False:
                 self.dict_photo, self.dict_print = utils_wvu_new.get_img_dict(
-                           config.test_photo_dir, config.test_print_dir)
-
-            elif config.num_join_fingers == 2:
-                self.dict_photo, self.dict_print = utils_wvu_new.get_two_img_dict(
-                        config.test_photo_dir, config.test_print_dir, config.fnums)                
+                    config.test_photo_dir, config.test_print_dir)
+            
+            elif config.num_join_fingers >= 2 or config.is_one_fid == True:
+                self.dict_photo, self.dict_print = utils_wvu_new.get_multiple_img_dict(
+                    config.test_photo_dir, config.test_print_dir, config.fnums)             
 
         self.num_photo_samples = len(self.dict_photo)
-        mean = [0.5] 
-        std = [0.5]
-        fill_white = (255, )
 
-        self.train_trans = transforms.Compose([
-            transforms.Resize((config.img_size, config.img_size)), 
-            #transforms.RandomAffine(3),
-            #transforms.Pad(16),
-            #transforms.RandomCrop(256),
-            #transforms.ColorJitter(brightness=0.2),
-            transforms.RandomRotation(20, fill=fill_white),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ])
 
-        self.test_trans = transforms.Compose([
-            transforms.Resize((config.img_size, config.img_size)), 
-            transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)
-        ])
+    def trans(self, photo, print, train=True):
+        fill_photo = (255,)
+        fill_print = (255,)
 
-        self.trans = (self.train_trans if train else self.test_trans)
+        if config.dataset_name == "wvu_new" and config.photo_type == "vfp":
+            fill_photo = (0, )
+
+        if train == True:
+            # Resize
+            resize = transforms.Resize(size=(286, 286))
+            photo = resize(photo)
+            print = resize(print)
+
+            # Random crop
+            i, j, h, w = transforms.RandomCrop.get_params(
+                            photo, output_size=(config.img_size, config.img_size))
+            photo = TF.crop(photo, i, j, h, w)
+            print = TF.crop(print, i, j, h, w)
+
+            # Random horizontal flipping
+            if random.random() > 0.5:
+                photo = TF.hflip(photo)
+                print = TF.hflip(print)
+
+            # Random rotation
+            angle = transforms.RandomRotation.get_params(degrees=(0, 10))
+            photo = TF.rotate(photo, angle, fill=fill_photo)
+            print = TF.rotate(print, angle, fill=fill_print)
+
+        elif train == False:
+            # Resize
+            resize = transforms.Resize(size=(config.img_size, config.img_size))
+            photo = resize(photo)
+            print = resize(print)
+
+        # Transform to tensor
+        photo = TF.to_tensor(photo)
+        print = TF.to_tensor(print)
+
+        # normalize
+        normalize = transforms.Normalize(mean = [0.5], std = [0.5])
+        photo = normalize(photo)
+        print = normalize(print)
+
+        return photo, print
 
 
     def __len__(self):
-        return self.num_photo_samples * config.num_imposter
+        if self.train: 
+            return self.num_photo_samples * config.num_imposter
+        else:
+            return self.num_photo_samples * 2
+
 
     def __getitem__(self, index):
-        if index % config.num_imposter == 0: same_class = True
-        else: same_class = False 
-        finger_id, photo_image = self.dict_photo[index // config.num_imposter]
+        if self.train: 
+            num = index % config.num_imposter 
+            finger_id, photo_image = self.dict_photo[index // config.num_imposter]
 
-        # genuine pair 
-        if same_class:
+        else:
+            num = index % 2
+            finger_id, photo_image = self.dict_photo[index // 2]
+       
+        if num == 0:
+            same_class = True
             class_id = finger_id
 
         # imposter pair
         else:
+            same_class = False 
             class_id = list(self.dict_print.keys())[random.randint(0, 
                                             len(self.dict_print) - 1)]
 
@@ -79,29 +118,47 @@ class WVUNewVerifier(Dataset):
                 class_id = list(self.dict_print.keys())[random.randint(0, 
                                             len(self.dict_print) - 1)]  
 
+        # single finger
         if config.num_join_fingers == 1:
             ph_f = Image.open(photo_image).convert("L")
             pr_f = Image.open(self.dict_print[class_id]).convert("L")
 
-            img1 = self.trans(ph_f)
-            img2 = self.trans(pr_f)
+            img1, img2 = self.trans(ph_f, pr_f, self.train)
 
-        elif config.num_join_fingers == 2:
+        # two fingers
+        elif config.num_join_fingers >= 2:
             print_image = self.dict_print[class_id]
 
-            ph_f1 = self.trans(Image.open(photo_image[0]).convert("L")) 
-            ph_f2 = self.trans(Image.open(photo_image[1]).convert("L"))
-            pr_f1 = self.trans(Image.open(print_image[0]).convert("L")) 
-            pr_f2 = self.trans(Image.open(print_image[1]).convert("L"))
+            ph_f1 = Image.open(photo_image[0]).convert("L")
+            ph_f2 = Image.open(photo_image[1]).convert("L")
+            pr_f1 = Image.open(print_image[0]).convert("L")
+            pr_f2 = Image.open(print_image[1]).convert("L")
 
-            if config.join_type == "concat":
-                img1 = torch.cat([ph_f1, ph_f2], dim=2)
-                img2 = torch.cat([pr_f1, pr_f2], dim=2)
+            ph_f1, pr_f1 = self.trans(ph_f1, pr_f1, self.train)
+            ph_f2, pr_f2 = self.trans(ph_f2, pr_f2, self.train)
 
-            elif config.join_type == "channel": 
+            if config.num_join_fingers == 2:
                 img1 = torch.cat([ph_f1, ph_f2], dim=0)
                 img2 = torch.cat([pr_f1, pr_f2], dim=0)
 
+            else:
+                ph_f3 = Image.open(photo_image[2]).convert("L")
+                pr_f3 = Image.open(print_image[2]).convert("L")
+                ph_f3, pr_f3 = self.trans(ph_f3, pr_f3, self.train)
+
+                if config.num_join_fingers == 3:
+                    img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=0)
+                    img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
+                
+                else:
+                    ph_f4 = Image.open(photo_image[3]).convert("L")
+                    pr_f4 = Image.open(print_image[3]).convert("L")
+                    ph_f4, pr_f4 = self.trans(ph_f4, pr_f4, self.train)
+
+                    if config.num_join_fingers == 4:
+                        img1 = torch.cat([ph_f1, ph_f2, ph_f3, ph_f4], dim=0)
+                        img2 = torch.cat([pr_f1, pr_f2, pr_f3, pr_f4], dim=0)
+                            
         return img1, img2, same_class
 
 

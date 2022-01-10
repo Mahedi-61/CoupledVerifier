@@ -17,11 +17,11 @@ class WVUOldVerifier(Dataset):
 
         if (self.train == True): 
             print("trainning data loading")
-            if config.num_join_fingers == 1:
+            if config.num_join_fingers == 1 and config.is_one_fid == False:
                 self.dict_photo, self.dict_print = utils_wvu_old.get_img_dict(
                     config.train_photo_dir, config.train_print_dir)
             
-            elif config.num_join_fingers >= 2:
+            elif config.num_join_fingers >= 2 or config.is_one_fid == True:
                 if (config.is_all_pairs == True): ls_fnums = config.all_fnums
                 else: ls_fnums = config.fnums
 
@@ -29,12 +29,12 @@ class WVUOldVerifier(Dataset):
                     config.train_photo_dir, config.train_print_dir, ls_fnums)
 
         elif(self.train == False):
-            print("\nvalidation data loading")
-            if config.num_join_fingers == 1:
+            print("\nvalidation data loading ...")
+            if config.num_join_fingers == 1 and config.is_one_fid == False:
                 self.dict_photo, self.dict_print = utils_wvu_old.get_img_dict(
                     config.test_photo_dir, config.test_print_dir)
             
-            elif config.num_join_fingers >= 2:
+            elif config.num_join_fingers >= 2 or config.is_one_fid == True:
                 self.dict_photo, self.dict_print = utils_wvu_old.get_multiple_img_dict(
                     config.test_photo_dir, config.test_print_dir, config.fnums)
 
@@ -42,12 +42,13 @@ class WVUOldVerifier(Dataset):
 
 
     def trans(self, photo, print, train=True):
-        ph_mean = [0.70751] 
-        ph_std = [0.22236] 
+        #ph_mean = [0.70751] ph_std = [0.22236] 
+        #pr_mean = [0.63939] pr_std = [0.2373]
+        fill_photo = (255,)
+        fill_print = (255,)
 
-        pr_mean = [0.63939]
-        pr_std = [0.2373]
-        fill_white = (255,)
+        if config.dataset_name == "wvu_new" and config.photo_type == "vfp":
+            fill_photo = (0, )
 
         if train == True:
             # Resize
@@ -62,15 +63,14 @@ class WVUOldVerifier(Dataset):
             print = TF.crop(print, i, j, h, w)
 
             # Random horizontal flipping
-            
             if random.random() > 0.5:
                 photo = TF.hflip(photo)
                 print = TF.hflip(print)
 
             # Random rotation
             angle = transforms.RandomRotation.get_params(degrees=(0, 10))
-            photo = TF.rotate(photo, angle, fill=fill_white)
-            print = TF.rotate(print, angle, fill=fill_white)
+            photo = TF.rotate(photo, angle, fill=fill_photo)
+            print = TF.rotate(print, angle, fill=fill_print)
 
         elif train == False:
             # Resize
@@ -131,17 +131,9 @@ class WVUOldVerifier(Dataset):
 
         # two fingers
         elif config.num_join_fingers >= 2:
-            # take another finger 
-            class_id2 = list(self.dict_print.keys())[random.randint(0, 
-                                len(self.dict_print) - 1)]
-
-            while class_id == class_id2:
-                class_id2 = list(self.dict_print.keys())[random.randint(0, 
-                                            len(self.dict_print) - 1)]  
-
+            
             # Making genuine pairs & imposter pairs
-            if num == 0: print_image = self.dict_print[class_id]
-            elif num == 1: print_image = self.dict_print[class_id]
+            print_image = self.dict_print[class_id]
 
             ph_f1 = Image.open(photo_image[0]).convert("L") 
             ph_f2 = Image.open(photo_image[1]).convert("L")
@@ -152,27 +144,27 @@ class WVUOldVerifier(Dataset):
             ph_f2, pr_f2 = self.trans(ph_f2, pr_f2, self.train)
 
             if config.num_join_fingers == 2:
-                if config.join_type == "concat":
-                    img1 = torch.cat([ph_f1, ph_f2], dim=2)
-                    img2 = torch.cat([pr_f1, pr_f2], dim=2)
+                img1 = torch.cat([ph_f1, ph_f2], dim=0)
+                img2 = torch.cat([pr_f1, pr_f2], dim=0)
 
-                elif config.join_type == "channel": 
-                    img1 = torch.cat([ph_f1, ph_f2], dim=0)
-                    img2 = torch.cat([pr_f1, pr_f2], dim=0)
-
-            elif config.num_join_fingers == 3:
+            else:
                 ph_f3 = Image.open(photo_image[2]).convert("L")
                 pr_f3 = Image.open(print_image[2]).convert("L")
                 ph_f3, pr_f3 = self.trans(ph_f3, pr_f3, self.train)
 
-                if config.join_type == "concat":
-                    img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=2)
-                    img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=2)
-
-                elif config.join_type == "channel": 
+                if config.num_join_fingers == 3:
                     img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=0)
                     img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
+                
+                else:
+                    ph_f4 = Image.open(photo_image[3]).convert("L")
+                    pr_f4 = Image.open(print_image[3]).convert("L")
+                    ph_f4, pr_f4 = self.trans(ph_f4, pr_f4, self.train)
 
+                    if config.num_join_fingers == 4:
+                        img1 = torch.cat([ph_f1, ph_f2, ph_f3, ph_f4], dim=0)
+                        img2 = torch.cat([pr_f1, pr_f2, pr_f3, pr_f4], dim=0)
+                            
         return img1, img2, same_class
 
 

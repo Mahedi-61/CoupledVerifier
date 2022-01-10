@@ -131,48 +131,84 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
     for key in list(all_sub_finger.keys()):
         for fnums in ls_fnums:
             if set(fnums).issubset(set(all_sub_finger[key])):
-                first_finger_dir = os.path.join(photo_path, key + "_" + fnums[0])
-                first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
+                first_f_dir = os.path.join(photo_path, key + "_" + fnums[0])
+                first_f_img = os.path.join(first_f_dir, os.listdir(first_f_dir)[0])
 
-                second_finger_dir = os.path.join(photo_path, key + "_" + fnums[1])
-                second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
+                if config.num_join_fingers == 1:
+                    photo_finger_dict[index] = [key, first_f_img]
 
-                if config.num_join_fingers == 2:
-                    photo_finger_dict[index] = [key + "_"+  str(index), [first_finger_img, second_finger_img]]
+                else:
+                    second_f_dir = os.path.join(photo_path, key + "_" + fnums[1])
+                    second_f_img = os.path.join(second_f_dir, os.listdir(second_f_dir)[0]) 
 
-                elif config.num_join_fingers == 3:
-                    third_finger_dir = os.path.join(photo_path, key + "_" + fnums[2])
-                    third_finger_img = os.path.join(third_finger_dir, os.listdir(third_finger_dir)[0])
-                    photo_finger_dict[index] = [key + "_"+  str(index), [first_finger_img, 
-                                                                second_finger_img, third_finger_img]] 
+                    if config.num_join_fingers == 2:
+                        photo_finger_dict[index] = [key, [first_f_img, second_f_img]]
+                    
+                    else:
+                        third_f_dir = os.path.join(photo_path, key + "_" + fnums[2])
+                        third_f_img = os.path.join(third_f_dir, os.listdir(third_f_dir)[0])
+
+                        if config.num_join_fingers == 3:
+                            photo_finger_dict[index] = [key, [first_f_img, 
+                                                                second_f_img, third_f_img]] 
+
+                        else:
+                            fourth_f_dir = os.path.join(photo_path, key + "_" + fnums[3])
+                            fourth_f_img = os.path.join(fourth_f_dir, os.listdir(fourth_f_dir)[0])
+                            if config.num_join_fingers == 4:
+                                photo_finger_dict[index] = [key, [first_f_img, 
+                                                    second_f_img, third_f_img, fourth_f_img]] 
 
                 # for print
-                first_finger_dir = os.path.join(print_path, key + "_" + fnums[0])
-                first_finger_img = os.path.join(first_finger_dir, os.listdir(first_finger_dir)[0])
+                first_f_dir = os.path.join(print_path, key + "_" + fnums[0])
+                first_f_img = os.path.join(first_f_dir, os.listdir(first_f_dir)[0])
 
-                second_finger_dir = os.path.join(print_path, key + "_" + fnums[1])
-                second_finger_img = os.path.join(second_finger_dir, os.listdir(second_finger_dir)[0]) 
+                if config.num_join_fingers == 1:
+                    print_finger_dict[key] = [first_f_img]
+                    index += 1
+                    break
+
+                second_f_dir = os.path.join(print_path, key + "_" + fnums[1])
+                second_f_img = os.path.join(second_f_dir, os.listdir(second_f_dir)[0]) 
 
                 if config.num_join_fingers == 2:
-                    print_finger_dict[key + "_"+  str(index)] = [first_finger_img, second_finger_img]
+                    print_finger_dict[key] = [first_f_img, second_f_img]
+                    index += 1
+                    break
 
-                elif config.num_join_fingers == 3:
-                    third_finger_dir = os.path.join(print_path, key + "_" + fnums[2])
-                    third_finger_img = os.path.join(third_finger_dir, os.listdir(third_finger_dir)[0]) 
-                    print_finger_dict[key + "_"+  str(index)] = [first_finger_img, 
-                                                            second_finger_img, third_finger_img]
+                third_f_dir = os.path.join(print_path, key + "_" + fnums[2])
+                third_f_img = os.path.join(third_f_dir, os.listdir(third_f_dir)[0]) 
 
-                index += 1
+                if config.num_join_fingers == 3:
+                    print_finger_dict[key] = [first_f_img, 
+                                                    second_f_img, third_f_img]
+                    index += 1
+                    break
 
+                fourth_f_dir = os.path.join(print_path, key + "_" + fnums[3])
+                fourth_f_img = os.path.join(fourth_f_dir, os.listdir(fourth_f_dir)[0]) 
+
+                if config.num_join_fingers == 4:
+                    print_finger_dict[key] = [first_f_img, 
+                                            second_f_img, third_f_img, fourth_f_img]
+                    index += 1
+
+                
     print("Joint Fingers ID: ", ls_fnums)
     print("Number of Data: ", len(photo_finger_dict))
     return photo_finger_dict, print_finger_dict
 
 
 # calculating scores 
-def calculate_scores(ls_labels, ls_sq_dist):
-    pred_ls = torch.cat(ls_sq_dist, 0)
+def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
+ 
     true_label = torch.cat(ls_labels, 0)
+    if is_ensemble == False: 
+        pred_ls = torch.cat(ls_sq_dist, 0)
+
+    elif is_ensemble == True:
+        pred_ls = ls_sq_dist
+
     pred_ls = pred_ls.cpu().detach().numpy()
     true_label = true_label.cpu().detach().numpy() 
 
@@ -299,7 +335,7 @@ if __name__ == "__main__":
     #a = AverageMeter()
 
     ph_d, pr_d = get_multiple_img_dict(config.train_photo_dir, 
-                                config.train_print_dir, [["2", "4", "9"]])
+                                config.train_print_dir, [["8"]])
     
     print(len(ph_d))
     print(len(pr_d))

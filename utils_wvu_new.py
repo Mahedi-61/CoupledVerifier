@@ -43,11 +43,12 @@ def plot_tensors(tensors, title):
     plt.show() 
 
 
-def save_model(net_photo, net_print, optimizer_G, disc_photo, disc_print, epoch, is_best):
+def save_model(net_photo, net_print, fidentity, optimizer_G, disc_photo, disc_print, epoch, is_best):
     checkpoint = {}
 
     checkpoint["net_photo"] = net_photo.state_dict()
     checkpoint["net_print"] = net_print.state_dict()
+    checkpoint["fidentity"] = fidentity.state_dict()
     checkpoint["optimizer_G"] = optimizer_G.state_dict()
     checkpoint["disc_photo"] = disc_photo.state_dict()
     checkpoint["disc_print"] = disc_print.state_dict() 
@@ -58,7 +59,7 @@ def save_model(net_photo, net_print, optimizer_G, disc_photo, disc_print, epoch,
     
     elif is_best == True:
         print("saving best model so far")
-        torch.save(checkpoint, config.best_model + ".pth")
+        torch.save(checkpoint, config.best_model + str(epoch) + ".pth")
 
 
 
@@ -88,69 +89,94 @@ def get_img_dict(photo_path, print_path):
     return photo_finger_dict, print_finger_dict
 
 
-def get_two_img_dict(photo_path, print_path, fnums):
+def get_multiple_img_dict(photo_path, print_path, ls_fnums):
     photo_finger_dict = {}
     print_finger_dict = {}
 
     index = 0
     for sub_id in os.listdir(photo_path):
-        sub_dir = os.path.join(photo_path, sub_id) 
+        for fnums in ls_fnums:
+            sub_dir = os.path.join(photo_path, sub_id) 
 
-        first_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
-        second_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
+            first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
+            if config.num_join_fingers == 1:
+                photo_finger_dict[index] = [sub_id, first_f_dir]
 
-        photo_finger_dict[index] = [sub_id, [first_finger_dir, second_finger_dir]] 
+            else:
+                second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
+                if config.num_join_fingers == 2:
+                    photo_finger_dict[index] = [sub_id, [first_f_dir, second_f_dir]] 
 
-        index += 1
+                else:
+                    third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
+                    if config.num_join_fingers == 3:
+                        photo_finger_dict[index] = [sub_id, [first_f_dir, second_f_dir, third_f_dir]]
 
-        # for finger print
-        sub_dir = os.path.join(print_path, sub_id)
-        if(os.path.isdir(sub_dir)):
-            first_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
-            second_finger_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
+                    else:
+                        fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
+                        if config.num_join_fingers == 4:
+                            photo_finger_dict[index] = [sub_id, [first_f_dir, 
+                                            second_f_dir, third_f_dir, fourth_f_dir]]
 
-            print_finger_dict[sub_id] = [first_finger_dir, second_finger_dir] 
+            index += 1
 
-    print("Joint Fingers ID: ", fnums)
+            # for finger print
+            sub_dir = os.path.join(print_path, sub_id)
+            if(os.path.isdir(sub_dir)):
+
+                first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
+                if config.num_join_fingers == 1:
+                    print_finger_dict[sub_id] = [first_f_dir] 
+                    break
+
+                second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
+                if config.num_join_fingers == 2:
+                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir] 
+                    break
+
+                third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
+                if config.num_join_fingers == 3:
+                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir, third_f_dir] 
+                    break
+
+                fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
+                if config.num_join_fingers == 4:
+                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir, third_f_dir, fourth_f_dir] 
+                    break
+
+    print("Joint Fingers ID: ", ls_fnums)
     print("Number of Data: ", len(photo_finger_dict))
     return photo_finger_dict, print_finger_dict
 
 
 
-def load_one_checkpoint():
-    loaded_model_file = os.path.join(config.weights_one_dir, 
-                                    "best_model_000.pth")
-    checkpoint = torch.load(loaded_model_file)
-    return checkpoint
-
-def load_two_checkpoint():
-    loaded_model_file = os.path.join(config.weights_two_dir, 
-                                    "model_res18_m75_270_f.pth")
-    checkpoint = torch.load(loaded_model_file)
-    return checkpoint
-
-
 # calculating scores 
-def calculate_scores(ls_labels, ls_sq_dist):
-    pred_ls = torch.cat(ls_sq_dist, 0)
+def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
+    
+    if is_ensemble == False: 
+        pred_ls = torch.cat(ls_sq_dist, 0)
+    elif is_ensemble == True:
+        pred_ls = ls_sq_dist
+        
     true_label = torch.cat(ls_labels, 0)
     pred_ls = pred_ls.cpu().detach().numpy()
     true_label = true_label.cpu().detach().numpy() 
-
+    
     # sklearn always takes (y_true, y_pred)
     fprs, tprs, threshold = metrics.roc_curve(true_label, pred_ls)
     eer = fprs[np.nanargmin(np.absolute((1 - tprs) - fprs))]
     auc = metrics.auc(fprs, tprs)
-
     print("AUC {:.4f} | EER {:.4f}".format(auc, eer))
     #np.save("%s/lbl_test.npy" %(config.saved_data_dir), true_label)
     #np.save("%s/dist_test.npy" %(config.saved_data_dir), pred_ls)
+    
+    return auc, eer 
 
 
 if __name__ == "__main__":
     #t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
-    phdict, prdict =  get_two_img_dict(config.train_photo_dir, 
-                            config.train_print_dir, config.fnums) 
+    ph_dict, pr_dict =  get_multiple_img_dict(config.train_photo_dir, 
+                            config.train_print_dir, [["7", "8", "9"]]) 
     
-    print(prdict["6664111"])
+    print(pr_dict["2631416"])
