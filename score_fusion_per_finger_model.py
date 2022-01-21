@@ -6,30 +6,47 @@ import config
 from model import *
 import random 
 import os
-import utils_wvu_old
-#import utils_wvu_new
 from PIL import Image 
+from collections import OrderedDict
+import random 
 
-f1_dir = "F1_D1_ID2_A1"
-f2_dir = "F1_D1_ID3_A1"
-f3_dir = "F1_D1_ID7_A1"
-f4_dir = "F1_D1_ID8_A1"
+if config.dataset_name == "wvu_old":
+    from utils_wvu_old import *
+    w_dir = config.old_weights_dir
 
-is_combine = False          
+elif config.dataset_name == "wvu_new":
+    from utils_wvu_new import *
+    w_dir = config.new_weights_dir
+
+f1_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][0]
+f2_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][1]
+
+if config.num_join_fingers >= 3:
+    f3_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][2]
+
+    if config.num_join_fingers == 4:
+         f4_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][3]
+
+is_combine = True                    
 
 ## Special Class for Fixed Test set and results
 class WVUVerifierForTest(Dataset):
-    def __init__(self):
+    def __init__(self, is_fixed = True):
         super().__init__()
 
         print("test data")
         if config.num_join_fingers >= 2:
-            self.dict_photo, self.dict_print = utils_wvu_old.get_multiple_img_dict(
+            self.dict_photo, self.dict_print = get_multiple_img_dict(
                     config.test_photo_dir, config.test_print_dir, config.fnums)
 
-        self.num_photo_samples = len(self.dict_photo)
-        print("\nNumber of Fingers: ", config.num_join_fingers)
+        self.is_fixed = is_fixed 
+        print("Dataset: ", config.dataset_name)
+        print("experiment type: test")
+        print("Number of Fingers IDs: ", len(self.dict_photo))
+        print("Number of Fingers:", config.num_join_fingers)
         print("Network Arch:", config.w_name.split("_")[-1])
+        if is_combine: print("loading models from: ", config.combined_w_name)
+        print("Number of imposter pair: ", config.num_pair_test)
 
         self.test_trans = transforms.Compose([
             transforms.Resize((config.img_size, config.img_size)), 
@@ -37,31 +54,51 @@ class WVUVerifierForTest(Dataset):
             transforms.Normalize(mean=[0.5], std=[0.5])
         ])
 
+        self.dict_print = OrderedDict(sorted(self.dict_print.items()))
+        self.new_imposter_pos = 0
+
 
     def __len__(self):
-        return self.num_photo_samples * config.num_pair_test 
+        return  len(self.dict_photo) * config.num_pair_test 
 
     def __getitem__(self, index):
         num = index % config.num_pair_test 
+        id_position = (index // config.num_pair_test) 
+
         # genuine pair 
         if (num == 0):
             finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
             class_id = finger_id
             same_class = True
+            #print("Photo: " + str(id_position) + "| Print: " + str(id_position) + " genuine")
+            self.new_imposter_pos = 0
 
         # imposter pair
         elif (num > 0):
             finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
             same_class = False 
 
-            class_id = list(self.dict_print.keys())[random.randint(0, 
-                                        len(self.dict_print) - 1)]
+            # fixed test set
+            if self.is_fixed:
+                if (id_position + num <  len(self.dict_photo)):
+                    class_id = list(self.dict_print.keys())[id_position + num]
+                    #print("Photo: " + str(id_position) + "| Print: " + str(id_position + num))
 
-            while finger_id == class_id:
+                else:
+                    class_id = list(self.dict_print.keys())[self.new_imposter_pos]
+                    #print("Photo: " + str(id_position) + "| Print: " + str(self.new_imposter_pos))
+                    self.new_imposter_pos += 1
+
+            # random test set
+            else:
                 class_id = list(self.dict_print.keys())[random.randint(0, 
+                                            len(self.dict_print) - 1)]
+
+                while finger_id == class_id:
+                    class_id = list(self.dict_print.keys())[random.randint(0, 
                                             len(self.dict_print) - 1)] 
 
-
+        
         print_image = self.dict_print[class_id]
 
         # for 2 fingers
@@ -127,7 +164,7 @@ class VerifTest:
                         config.combined_w_name, img_dim=config.img_dim)
 
         if config.is_load_model:
-            if is_combine:
+            if is_combine: 
                 print("loading combined models")
                 # for combined weight
                 combine_model = os.path.join(config.combined_w_dir, "best_model_000.pth")
@@ -137,8 +174,8 @@ class VerifTest:
             
 
             print("loading 10 singer finger models")
-            w_dir_f1 = os.path.join(config.old_weights_dir, f1_dir)
-            w_dir_f2 = os.path.join(config.old_weights_dir, f2_dir)
+            w_dir_f1 = os.path.join(w_dir, f1_dir)
+            w_dir_f2 = os.path.join(w_dir, f2_dir)
 
             all_models_f1 = sorted(os.listdir(w_dir_f1), 
                     key= lambda x: int((x.split("_")[-1]).split(".")[0]))  
@@ -146,36 +183,37 @@ class VerifTest:
             all_models_f2 = sorted(os.listdir(w_dir_f2), 
                     key= lambda x: int((x.split("_")[-1]).split(".")[0]))  
 
-            assert (all_models_f1 == all_models_f2), "# finger models must be equal size"
+
+            assert (len(all_models_f1) == len(all_models_f2)), "# finger models must be equal size"
 
             if config.num_join_fingers >=3:
-                w_dir_f3 = os.path.join(config.old_weights_dir, f3_dir)
+                w_dir_f3 = os.path.join(w_dir, f3_dir)
                 all_models_f3 = sorted(os.listdir(w_dir_f3), 
                     key= lambda x: int((x.split("_")[-1]).split(".")[0])) 
 
-                assert (all_models_f1 == all_models_f3), "# finger models must be equal"
+                assert (len(all_models_f1) == len(all_models_f3)), "# finger models must be equal"
 
                 if config.num_join_fingers == 4:
-                    w_dir_f4 = os.path.join(config.old_weights_dir, f4_dir)
+                    w_dir_f4 = os.path.join(w_dir, f4_dir)
                     all_models_f4 = sorted(os.listdir(w_dir_f4), 
                         key= lambda x: int((x.split("_")[-1]).split(".")[0])) 
 
-                    assert (all_models_f1 == all_models_f4), "# finger models must be equal"
+                    assert (len(all_models_f1) == len(all_models_f4)), "# finger models must be equal"
 
 
-            for model in all_models_f1:
+            for i, model in enumerate(all_models_f1):
                 model_file_f1 = os.path.join(w_dir_f1, model)
                 checkpoint_f1 = torch.load(model_file_f1)
 
-                model_file_f2 = os.path.join(w_dir_f2, model)
+                model_file_f2 = os.path.join(w_dir_f2, all_models_f2[i]) #model
                 checkpoint_f2 = torch.load(model_file_f2)
 
                 if config.num_join_fingers >= 3:
-                    model_file_f3 = os.path.join(w_dir_f3, model)
+                    model_file_f3 = os.path.join(w_dir_f3, all_models_f3[i]) #model
                     checkpoint_f3 = torch.load(model_file_f3)
 
                     if config.num_join_fingers == 4:
-                        model_file_f4 = os.path.join(w_dir_f4, model)
+                        model_file_f4 = os.path.join(w_dir_f4, all_models_f4[i])  #model
                         checkpoint_f4 = torch.load(model_file_f4)
 
 
@@ -276,7 +314,7 @@ class VerifTest:
                 ls_sq_dist.append(dist_sq.data)
                 ls_labels.append((1 - label).data)
             
-        utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
+        calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
         #self.plot_roc()
 
     # plotting roc curve 

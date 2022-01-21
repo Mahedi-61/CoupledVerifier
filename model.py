@@ -86,14 +86,22 @@ def get_discriminator(img_dim):
 
 
 # loading save_w_name to finetune on single or multi-finger, and same or another dataset
-def load_saved_model_for_finetuing(net_photo, net_print, 
-        disc_photo, disc_print, is_disc_load=True, partial_finetune=False):
+def load_saved_model_for_finetuing(net_photo, net_print, disc_photo, disc_print, 
+                                    is_disc_load=True, partial_finetune=False):
     
-    save_w_dir = os.path.join(config.root_dir, "checkpoints", 
-                              config.dataset_name, config.save_w_name)
+    
+    if config.is_finetune == False:
+        if config.dataset_name == "wvu_old":
+            save_w_dir = os.path.join(config.dataset_cp_dir, config.save_w_name)
+
+        if config.dataset_name == "wvu_new":
+             save_w_dir = os.path.join(config.new_weights_dir, config.save_w_name)
+
+    else:
+        save_w_dir = os.path.join(config.old_weights_dir, config.save_w_name)
+
 
     if config.is_convert_one_to_many == False: 
-
         loaded_model_file = os.path.join(save_w_dir, "best_model_000.pth")
         checkpoint = torch.load(loaded_model_file)
         net_photo.load_state_dict(checkpoint["net_photo"])
@@ -107,8 +115,8 @@ def load_saved_model_for_finetuing(net_photo, net_print,
             if config.num_join_fingers >=1:
                 print("Allah help me")
                 network_arch = config.save_w_name.split("_")[-1]
-                if network_arch == "A1":
 
+                if network_arch == "A1":
                     # setting generator gradient false
                     for name, param in net_photo.named_parameters():
                         #print(name)
@@ -121,13 +129,11 @@ def load_saved_model_for_finetuing(net_photo, net_print,
                             param.requires_grad = True
 
                         else:  param.requires_grad = False
-
                         """
                         if name=="module.decoder.25.weight" or name=="module.decoder.25.bias":
                             param.requires_grad = True
                         """
                         
-
                     for name, param in net_print.named_parameters():
                         if (name=="module.backbone.7.1.conv2.weight" or
                             name=="module.backbone.7.1.bn2.weight" or 
@@ -162,19 +168,6 @@ def load_saved_model_for_finetuing(net_photo, net_print,
                         disc_photo, disc_print, config.save_w_name, is_disc_load)
    
 
-
-def load_saved_one_model_for_finetuing(net_print): #optimizer_G
-    if config.is_convert_one_to_many == False: 
-        if config.num_join_fingers == 1:
-            loaded_model_file = os.path.join(config.old_weights_one_dir, 
-                                        "best_model_000.pth")
-    
-        elif config.num_join_fingers == 2:
-            loaded_model_file = os.path.join(config.old_weights_two_dir, 
-                                        "best_model_000.pth")
-
-        checkpoint = torch.load(loaded_model_file)
-        net_print.load_state_dict(checkpoint["net_print"])
 
 
 def compatible_load(checkpoint, net_photo, net_print, disc_photo, 

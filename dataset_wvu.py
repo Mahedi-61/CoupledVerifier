@@ -1,16 +1,21 @@
 import  random  
 import numpy as np 
-import os 
 from PIL import Image
 import torch  
 from torch.utils.data import Dataset 
 from torchvision import transforms 
 import config
-import utils_wvu_old 
 import torchvision.transforms.functional as TF
 
+# load dataset: wvu_new, wvu_old
+if config.dataset_name == "wvu_old":
+    from utils_wvu_old import get_img_dict, get_multiple_img_dict
 
-class WVUOldVerifier(Dataset):
+elif config.dataset_name == "wvu_new":
+    from utils_wvu_new import get_img_dict, get_multiple_img_dict
+
+
+class WVUFingerDataset(Dataset):
     def __init__(self, train = True):
         super().__init__()
         self.train = train 
@@ -18,32 +23,30 @@ class WVUOldVerifier(Dataset):
         if (self.train == True): 
             print("trainning data loading")
             if config.num_join_fingers == 1 and config.is_one_fid == False:
-                self.dict_photo, self.dict_print = utils_wvu_old.get_img_dict(
+                self.dict_photo, self.dict_print = get_img_dict(
                     config.train_photo_dir, config.train_print_dir)
             
             elif config.num_join_fingers >= 2 or config.is_one_fid == True:
                 if (config.is_all_pairs == True): ls_fnums = config.all_fnums
                 else: ls_fnums = config.fnums
 
-                self.dict_photo, self.dict_print = utils_wvu_old.get_multiple_img_dict(
+                self.dict_photo, self.dict_print = get_multiple_img_dict(
                     config.train_photo_dir, config.train_print_dir, ls_fnums)
 
         elif(self.train == False):
             print("\nvalidation data loading ...")
             if config.num_join_fingers == 1 and config.is_one_fid == False:
-                self.dict_photo, self.dict_print = utils_wvu_old.get_img_dict(
+                self.dict_photo, self.dict_print = get_img_dict(
                     config.test_photo_dir, config.test_print_dir)
             
             elif config.num_join_fingers >= 2 or config.is_one_fid == True:
-                self.dict_photo, self.dict_print = utils_wvu_old.get_multiple_img_dict(
+                self.dict_photo, self.dict_print = get_multiple_img_dict(
                     config.test_photo_dir, config.test_print_dir, config.fnums)
 
         self.num_photo_samples = len(self.dict_photo)
 
 
     def trans(self, photo, print, train=True):
-        #ph_mean = [0.70751] ph_std = [0.22236] 
-        #pr_mean = [0.63939] pr_std = [0.2373]
         fill_photo = (255,)
         fill_print = (255,)
 
@@ -121,18 +124,13 @@ class WVUOldVerifier(Dataset):
 
         # single finger
         if config.num_join_fingers == 1:
-            num_print_images = len(self.dict_print[class_id])
-            pos_print =  random.randint(0, num_print_images-1) 
-
             ph_f = Image.open(photo_image).convert("L")
-            pr_f = Image.open((self.dict_print[class_id])[pos_print]).convert("L")
+            pr_f = Image.open((self.dict_print[class_id])[0]).convert("L")
 
             img1, img2 = self.trans(ph_f, pr_f, self.train)
 
         # two fingers
         elif config.num_join_fingers >= 2:
-            
-            # Making genuine pairs & imposter pairs
             print_image = self.dict_print[class_id]
 
             ph_f1 = Image.open(photo_image[0]).convert("L") 
@@ -169,6 +167,8 @@ class WVUOldVerifier(Dataset):
 
 
     def find_mean_std(self):
+        #ph_mean = [0.70751] ph_std = [0.22236] 
+        #pr_mean = [0.63939] pr_std = [0.2373]
         ph_img_ls = [self.dict_photo[i][0] for i in range(self.num_photo_samples)]
         pil_img = [Image.open(self.dict_print[ph_img][0]).convert("L") for ph_img in ph_img_ls]
 
@@ -184,4 +184,8 @@ class WVUOldVerifier(Dataset):
 
 
 if __name__ == "__main__":
-    vt = WVUOldVerifier()
+    vt = WVUFingerDataset()
+    img1, img2, same_class = vt.__getitem__(90)
+    print(img1.shape)
+    #title = ("genuine pair" if same_class else "imposter pair")
+    #utils_wvu_new.plot_tensors([img1, img2], title) 

@@ -1,108 +1,18 @@
 import numpy as np 
 import torch 
-from torch.utils.data import Dataset, DataLoader 
-from torchvision import transforms 
+from torch.utils.data import DataLoader 
 import config 
 from model import *
-import random 
 import os
 import utils_wvu_new
-from PIL import Image 
+import dataset_wvu_test
 
-
-is_ensemble = False    
-
-## Special Class for Fixed Test set and results
-class WVUNewVerifierForTest(Dataset):
-    def __init__(self):
-        super().__init__()
-
-        print("test data")
-        if config.num_join_fingers == 1 and config.is_one_fid == False:
-            self.dict_photo, self.dict_print = utils_wvu_new.get_img_dict(
-            config.test_photo_dir, config.test_print_dir)
-
-        elif config.num_join_fingers >= 2 or config.is_one_fid == True:
-            self.dict_photo, self.dict_print = utils_wvu_new.get_multiple_img_dict(
-            config.test_photo_dir, config.test_print_dir, config.fnums)
-
-        self.num_photo_samples = len(self.dict_photo)
-        print("Number of Fingers:", config.num_join_fingers)
-        print("Network Arch:", config.w_name.split("_")[-1])
-
-        self.test_trans = transforms.Compose([
-            transforms.Resize((config.img_size, config.img_size)), 
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
-        ])
-
-
-    def __len__(self):
-        return self.num_photo_samples * config.num_pair_test 
-
-    def __getitem__(self, index):
-        num = index % config.num_pair_test 
-        # genuine pair 
-        if (num == 0):
-            finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
-            class_id = finger_id
-            same_class = True
-
-        # imposter pair
-        elif (num > 0):
-            finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
-            same_class = False 
-
-            class_id = list(self.dict_print.keys())[random.randint(0, 
-                                        len(self.dict_print) - 1)]
-
-            while finger_id == class_id:
-                class_id = list(self.dict_print.keys())[random.randint(0, 
-                                            len(self.dict_print) - 1)] 
-
-        if config.num_join_fingers == 1:
-            ph_f = Image.open(photo_image).convert("L")
-            pr_f = Image.open((self.dict_print[class_id])).convert("L")
-
-            img1 = self.test_trans(ph_f)
-            img2 = self.test_trans(pr_f)
-
-        elif config.num_join_fingers >= 2:
-            print_image = self.dict_print[class_id]
-
-            ph_f1 = self.test_trans(Image.open(photo_image[0]).convert("L")) 
-            ph_f2 = self.test_trans(Image.open(photo_image[1]).convert("L"))
-            pr_f1 = self.test_trans(Image.open(print_image[0]).convert("L")) 
-            pr_f2 = self.test_trans(Image.open(print_image[1]).convert("L"))
-
-            if config.num_join_fingers == 2:
-                img1 = torch.cat([ph_f1, ph_f2], dim=0)
-                img2 = torch.cat([pr_f1, pr_f2], dim=0)
-
-            else:
-                ph_f3 = self.test_trans(Image.open(photo_image[2]).convert("L"))
-                pr_f3 = self.test_trans(Image.open(print_image[2]).convert("L"))
-
-                if config.num_join_fingers == 3:
-                    img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=0)
-                    img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
-
-                else:
-                    ph_f4 = self.test_trans(Image.open(photo_image[3]).convert("L"))
-                    pr_f4 = self.test_trans(Image.open(print_image[3]).convert("L"))
-
-                    if config.num_join_fingers == 4:
-                        img1 = torch.cat([ph_f1, ph_f2, ph_f3, ph_f4], dim=0)
-                        img2 = torch.cat([pr_f1, pr_f2, pr_f3, pr_f4], dim=0)
-
-        return img1, img2, same_class
-
+is_ensemble = True         
 
 class VerifTest:
     def __init__(self):
-        print("loading dataset ...")
         self.test_loader = DataLoader(
-            WVUNewVerifierForTest(),
+            dataset_wvu_test.WVUFingerDatasetForTest(is_fixed = True),
             batch_size=config.batch_size, 
             shuffle=False,
             pin_memory=True,
@@ -137,6 +47,8 @@ class VerifTest:
                     self.net_print.load_state_dict(checkpoint["net_print"])
 
                 print(model_file)
+                del checkpoint
+
                 if is_ensemble == False:
                     ls_sq_dist, ls_labels = self.test()
                 
@@ -199,9 +111,12 @@ def simple_average(ls_each_finger_dist):
 
 if __name__ == "__main__":
     v = VerifTest()
-
     """
     vt = WVUNewVerifierForTest()
-    img1, img2, label = vt.__getitem__(13)
-    utils_wvu_new.plot_tensors([img1, img2], title=label)
+    for i in range(400, 579):
+        phi, pi, sc = vt.__getitem__(i)
     """
+
+    #vt = WVUNewVerifierForTest()
+    #img1, img2, label = vt.__getitem__(13)
+    #utils_wvu_new.plot_tensors([img1, img2], title=label)

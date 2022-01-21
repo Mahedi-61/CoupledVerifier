@@ -84,7 +84,7 @@ def get_img_dict(photo_path, print_path):
         if(os.path.isdir(sub_dir)):
             for img_file in os.listdir(sub_dir):
                 finger_id = img_file.split(".")[0]
-                print_finger_dict[finger_id] = os.path.join(sub_dir, img_file)
+                print_finger_dict[finger_id] = [os.path.join(sub_dir, img_file)]
 
     return photo_finger_dict, print_finger_dict
 
@@ -100,25 +100,23 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
 
             first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
             if config.num_join_fingers == 1:
-                photo_finger_dict[index] = [sub_id, first_f_dir]
+                photo_finger_dict[index] = [sub_id + "_" + str(index), first_f_dir]
 
             else:
                 second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
                 if config.num_join_fingers == 2:
-                    photo_finger_dict[index] = [sub_id, [first_f_dir, second_f_dir]] 
+                    photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, second_f_dir]] 
 
                 else:
                     third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
                     if config.num_join_fingers == 3:
-                        photo_finger_dict[index] = [sub_id, [first_f_dir, second_f_dir, third_f_dir]]
+                        photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, second_f_dir, third_f_dir]]
 
                     else:
                         fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
                         if config.num_join_fingers == 4:
-                            photo_finger_dict[index] = [sub_id, [first_f_dir, 
-                                            second_f_dir, third_f_dir, fourth_f_dir]]
-
-            index += 1
+                            photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, 
+                                                            second_f_dir, third_f_dir, fourth_f_dir]]
 
             # for finger print
             sub_dir = os.path.join(print_path, sub_id)
@@ -126,26 +124,30 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
 
                 first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
                 if config.num_join_fingers == 1:
-                    print_finger_dict[sub_id] = [first_f_dir] 
-                    break
+                    print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir] 
 
-                second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
-                if config.num_join_fingers == 2:
-                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir] 
-                    break
+                elif config.num_join_fingers >= 2:
+                    second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
 
-                third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
-                if config.num_join_fingers == 3:
-                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir, third_f_dir] 
-                    break
+                    if config.num_join_fingers == 2:
+                        print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir] 
 
-                fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
-                if config.num_join_fingers == 4:
-                    print_finger_dict[sub_id] = [first_f_dir, second_f_dir, third_f_dir, fourth_f_dir] 
-                    break
+                    elif config.num_join_fingers >= 3:
+                        third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
+
+                        if config.num_join_fingers == 3:
+                            print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir, third_f_dir] 
+
+                        elif config.num_join_fingers == 4:
+                            fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
+                            print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir, 
+                                                                        third_f_dir, fourth_f_dir] 
+
+            index += 1
 
     print("Joint Fingers ID: ", ls_fnums)
     print("Number of Data: ", len(photo_finger_dict))
+    print(len(print_finger_dict))
     return photo_finger_dict, print_finger_dict
 
 
@@ -178,5 +180,3 @@ if __name__ == "__main__":
     #a = AverageMeter()
     ph_dict, pr_dict =  get_multiple_img_dict(config.train_photo_dir, 
                             config.train_print_dir, [["7", "8", "9"]]) 
-    
-    print(pr_dict["2631416"])

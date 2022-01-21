@@ -7,13 +7,19 @@ from torch.autograd import Variable
 from model import *
 from utils_wvu_old import *
 import torch.nn.functional as F
-import dataset_wvu_old 
+import dataset_wvu
 from  torch.optim.lr_scheduler import ExponentialLR
+
+if config.dataset_name == "wvu_old":
+    from utils_wvu_old import *
+
+elif config.dataset_name == "wvu_new":
+    from utils_wvu_new import *
 
 class VerifTrain:
     def __init__(self):
         self.train_loader = DataLoader(
-            dataset_wvu_old.WVUOldVerifier(train = config.is_train),
+            dataset_wvu.WVUFingerDataset(train = config.is_train),
             batch_size=config.batch_size, 
             shuffle=False,
             pin_memory=True,
@@ -21,13 +27,14 @@ class VerifTrain:
         )
 
         self.val_loader = DataLoader(
-            dataset_wvu_old.WVUOldVerifier(train = not config.is_train),
+            dataset_wvu.WVUFingerDataset(train = not config.is_train),
             batch_size=config.batch_size, 
             shuffle=False,
             pin_memory=True,
             num_workers= 6  
         )
 
+        print("experiment type: train")
         print("Dataset: ", config.dataset_name)
         print("Number of Fingers: ", config.num_join_fingers)
         print("Network Arch:", config.w_name.split("_")[-1])
@@ -253,15 +260,17 @@ class VerifTrain:
 
             
             if (config.is_save_model and epoch >= config.start_saving_epoch):
+                """
                 auc, eer = self.validate() 
-                saving_auc = 0.97
+                saving_auc = 0.73
 
                 if (auc > saving_auc):
                     save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
                         self.disc_photo, self.disc_print, epoch, is_best=True)
+                """
 
-                if (epoch % 20 == 0):
-                    save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
+                #if (epoch % 20 == 0):
+                save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
                         self.disc_photo, self.disc_print, epoch, is_best=False)
 
             if (epoch !=0 and epoch % 50 == 0):
