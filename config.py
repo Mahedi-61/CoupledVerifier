@@ -2,37 +2,46 @@ import os
 import torch 
 
 #conditions
-dataset_name = "wvu_new" #wvu_new, wvu_old
-if dataset_name == "wvu_new": photo_type = "vfp" #vfp
+dataset_name = "wvu_old" #wvu_new, wvu_old
+photo_type = ""
+if dataset_name == "wvu_new": photo_type = "v" #vfp
 
-is_train = False                                                                                           
-is_load_model = True                                                                      
-is_finetune = False #on other dataset (same number of finger)
-is_one_fid = False #train and test only on finger ID 
-partial_finetune = False   # only finetuning the last layer of the pretrained model
-is_convert_one_to_many = False                                                                         
-num_join_fingers = 3
+is_train = False                                                                                                                                                                         
+is_load_model = True                                                                           
+is_one_fid = True #train and test only on finger ID 
+partial_finetune = False    # only finetuning the last layer of the pretrained model
+is_finetune = False           
+is_convert_one_to_many = False                                                                                  
+num_join_fingers = 4
 
-fnums = [["7", "8", "9"]]                                                                    
-w_name = "F3_D2vfp_IDALL_A1"  #weight save --> train | weights load --> test
+fnums = [["7"]]                                                                    
+w_name = "F1_D1_ID7_A1"  #weight save --> train | weights load --> test
+
 
  #weights for initialization
-if is_convert_one_to_many or partial_finetune or is_finetune: 
-    save_w_name = "F1_D2vfp_A1"
+save_w_name = "F1_D1_A1"
+conversion_type = ""
 
-is_all_pairs = True         
+# for testing 
+is_all_pairs = False                 
 combined_w_name = "" #require for score fusion   
+num_test_aug = 2
+is_test_augment = True
+
 multi_gpus = True  
 img_dim = num_join_fingers
 is_save_model = is_train 
+if is_train == True: is_test_augment = False       
+if is_test_augment == False: num_test_aug = 1
 
 # training parameters
+is_display = True 
 num_imposter = 2
-num_pair_test = 15
-batch_size = 96
+num_pair_test = 20
+batch_size = 230
 learning_rate = 0.0001
 weight_decay = 5e-4
-num_epochs = 200
+num_epochs = 120
 start_saving_epoch = 1
 
 if is_all_pairs:
@@ -62,8 +71,8 @@ feature_dim = 256
 delta_l1 = 100
 delta_l2 = 1
 delta_gan = 1
-# 65 == wvu_old; 
-margin = 65 #### 55 = g_vs_vfp (attention_unet) + g_vs_v (all) 
+# 65 == wvu_old; wvu_new vfp; 
+margin = 65
 img_size = 256
 eps = 1e-8
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -72,15 +81,15 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 root_dir = os.path.dirname(os.path.abspath(__file__))
 datasets_dir = os.path.join(root_dir, "..", "datasets")
 
-#if dataset_name == "wvu_new": dataset_type = "g_vs_gr"  #"g_vs_v", "g_vs_vfp"
 
 if dataset_name == "wvu_old":
-    train_dataset = "clean_12_as_train"  #clean
-    test_dataset =  "clean_13_as_test" #clean
+    train_dataset = "amar_clean_r60_as_train" #"wvu_combine"   
+    test_dataset =  "amar_clean_r60_as_test" #clean
 
 elif dataset_name == "wvu_new":
     train_dataset = "wvu_new_train"
     test_dataset =  "wvu_new_test"
+
 
 train_photo_dir = os.path.join(datasets_dir, train_dataset, "photo")
 train_print_dir = os.path.join(datasets_dir, train_dataset, "print")
@@ -94,6 +103,7 @@ saved_data_dir = os.path.join(dataset_cp_dir, "data")
 
 old_weights_dir = os.path.join(root_dir, "checkpoints", "wvu_old")
 new_weights_dir = os.path.join(root_dir, "checkpoints", "wvu_new", photo_type)
+
 
 # weights, model, best model
 if dataset_name == "wvu_old":
@@ -111,3 +121,11 @@ if w_name.split("_")[-1] == "A2":
     model_file = os.path.join(w_dir, "model_atten_m%d_" %margin)
 
 best_model = os.path.join(w_dir, "best_model_" )
+
+
+if is_finetune == True:
+    if conversion_type == "OvsVFP" or conversion_type == "OvsV":
+        save_w_dir = os.path.join(old_weights_dir, save_w_name)
+
+    if conversion_type == "VFPvsV":
+        save_w_dir =  os.path.join(root_dir, "checkpoints", "wvu_new", "vfp", save_w_name)

@@ -9,6 +9,7 @@ import os
 from PIL import Image 
 from collections import OrderedDict
 import random 
+import torchvision.transforms.functional as TF
 
 if config.dataset_name == "wvu_old":
     from utils_wvu_old import *
@@ -18,44 +19,87 @@ elif config.dataset_name == "wvu_new":
     from utils_wvu_new import *
     w_dir = config.new_weights_dir
 
-f1_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][0]
-f2_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][1]
+f1_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][0]
+f2_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][1]
 
 if config.num_join_fingers >= 3:
-    f3_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][2]
+    f3_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][2]
 
     if config.num_join_fingers == 4:
-         f4_dir = "F1_D2vfp_ID%s_A1" % config.fnums[0][3]
+         f4_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][3]
 
-is_combine = True                    
+
+is_combine = True        
+is_final_ensemble = True                                
 
 ## Special Class for Fixed Test set and results
 class WVUVerifierForTest(Dataset):
-    def __init__(self, is_fixed = True):
+    def __init__(self, test_aug_id, is_fixed = True):
         super().__init__()
 
-        print("test data")
         if config.num_join_fingers >= 2:
             self.dict_photo, self.dict_print = get_multiple_img_dict(
                     config.test_photo_dir, config.test_print_dir, config.fnums)
 
         self.is_fixed = is_fixed 
-        print("Dataset: ", config.dataset_name)
-        print("experiment type: test")
-        print("Number of Fingers IDs: ", len(self.dict_photo))
-        print("Number of Fingers:", config.num_join_fingers)
-        print("Network Arch:", config.w_name.split("_")[-1])
-        if is_combine: print("loading models from: ", config.combined_w_name)
-        print("Number of imposter pair: ", config.num_pair_test)
+        self.test_aug_id = test_aug_id
 
-        self.test_trans = transforms.Compose([
-            transforms.Resize((config.img_size, config.img_size)), 
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
-        ])
+        if config.is_display:
+            print("Dataset: ", config.dataset_name)
+            print("experiment type: test")
+            print("Number of Fingers IDs: ", len(self.dict_photo))
+            print("Number of Fingers:", config.num_join_fingers)
+            print("Network Arch:", config.w_name.split("_")[-1])
+            if is_combine: print("loading models from: ", config.combined_w_name)
+            print("Number of imposter pair: ", config.num_pair_test)
+            config.is_display = False 
 
         self.dict_print = OrderedDict(sorted(self.dict_print.items()))
         self.new_imposter_pos = 0
+
+
+    def test_trans(self, photo, print):
+        """
+         0: only (256, 256) resized images
+         1: (256, 256) h-flip resized images
+         2: (286, 286) resized (256, 256) center crop images
+        """
+
+        # Resize
+        if self.test_aug_id <= 1:
+            resize = transforms.Resize(size=(config.img_size, config.img_size))
+            photo = resize(photo)
+            print = resize(print)
+        
+        else:
+            resize = transforms.Resize(size=(286, 286))
+            photo = resize(photo)
+            print = resize(print)
+
+        # Random horizontal flipping
+        if self.test_aug_id == 1 or self.test_aug_id == 3:
+            photo = TF.hflip(photo)
+            print = TF.hflip(print)
+
+        if self.test_aug_id >= 2: 
+            # center crop
+            if self.test_aug_id == 2: i, j = (15, 15)
+            if self.test_aug_id == 3: i, j = (15, 15)
+            h=config.img_size
+            w=config.img_size
+            photo = TF.crop(photo, i, j, h, w)
+            print = TF.crop(print, i, j, h, w)
+
+        # Transform to tensor
+        photo = TF.to_tensor(photo)
+        print = TF.to_tensor(print)
+
+        # normalize
+        normalize = transforms.Normalize(mean = [0.5], std = [0.5])
+        photo = normalize(photo)
+        print = normalize(print)
+
+        return photo, print
 
 
     def __len__(self):
@@ -102,11 +146,13 @@ class WVUVerifierForTest(Dataset):
         print_image = self.dict_print[class_id]
 
         # for 2 fingers
-        ph_f1 = self.test_trans(Image.open(photo_image[0]).convert("L")) 
-        ph_f2 = self.test_trans(Image.open(photo_image[1]).convert("L"))
-        
-        pr_f1 = self.test_trans(Image.open(print_image[0]).convert("L")) 
-        pr_f2 = self.test_trans(Image.open(print_image[1]).convert("L"))
+        ph_f1 = Image.open(photo_image[0]).convert("L") 
+        ph_f2 = Image.open(photo_image[1]).convert("L")
+        pr_f1 = Image.open(print_image[0]).convert("L") 
+        pr_f2 = Image.open(print_image[1]).convert("L")
+
+        ph_f1, pr_f1 = self.test_trans(ph_f1, pr_f1)
+        ph_f2, pr_f2 = self.test_trans(ph_f2, pr_f2)
 
         img1 = torch.cat([ph_f1, ph_f2], dim=0)
         img2 = torch.cat([pr_f1, pr_f2], dim=0)
@@ -116,8 +162,9 @@ class WVUVerifierForTest(Dataset):
 
         # for 3 fingers (only adding additional finger's data)
         if config.num_join_fingers >= 3:
-            ph_f3 = self.test_trans(Image.open(photo_image[2]).convert("L"))
-            pr_f3 = self.test_trans(Image.open(print_image[2]).convert("L"))
+            ph_f3 = Image.open(photo_image[2]).convert("L")
+            pr_f3 = Image.open(print_image[2]).convert("L")
+            ph_f3, pr_f3 = self.test_trans(ph_f3, pr_f3)
 
             ls_photo_fs.append(ph_f3)
             ls_print_fs.append(pr_f3)
@@ -126,8 +173,9 @@ class WVUVerifierForTest(Dataset):
             img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
 
             if config.num_join_fingers == 4:
-                ph_f4 = self.test_trans(Image.open(photo_image[3]).convert("L"))
-                pr_f4 = self.test_trans(Image.open(print_image[3]).convert("L"))
+                ph_f4 = Image.open(photo_image[3]).convert("L")
+                pr_f4 = Image.open(print_image[3]).convert("L")
+                ph_f4, pr_f4 = self.test_trans(ph_f4, pr_f4)
 
                 ls_photo_fs.append(ph_f4)
                 ls_print_fs.append(pr_f4)
@@ -141,13 +189,6 @@ class WVUVerifierForTest(Dataset):
 class VerifTest:
     def __init__(self):
         print("loading test dataset ...")
-        self.test_loader = DataLoader(
-            WVUVerifierForTest(),
-            batch_size=config.batch_size, 
-            shuffle=False,
-            pin_memory=True,
-            num_workers= 6  
-        )
 
         # loading single finger model
         self.net_photo_f1, self.net_print_f1 = get_model(config.w_name, img_dim=1)
@@ -201,44 +242,75 @@ class VerifTest:
                     assert (len(all_models_f1) == len(all_models_f4)), "# finger models must be equal"
 
 
+            # for all models
+            ls_final_ensemble = []
             for i, model in enumerate(all_models_f1):
-                model_file_f1 = os.path.join(w_dir_f1, model)
-                checkpoint_f1 = torch.load(model_file_f1)
+                print("Finger model: ", i + 1)
+                # for all variations of test data
+                ls_each_test_aug_dist = []
+                for j in range(config.num_test_aug):
+                    self.test_loader = DataLoader(
+                        WVUVerifierForTest(test_aug_id=j, is_fixed = True),
+                        batch_size=config.batch_size, 
+                        shuffle=False,
+                        pin_memory=True,
+                        num_workers= 6  
+                    )
 
-                model_file_f2 = os.path.join(w_dir_f2, all_models_f2[i]) #model
-                checkpoint_f2 = torch.load(model_file_f2)
+                    model_file_f1 = os.path.join(w_dir_f1, model)
+                    checkpoint_f1 = torch.load(model_file_f1)
 
-                if config.num_join_fingers >= 3:
-                    model_file_f3 = os.path.join(w_dir_f3, all_models_f3[i]) #model
-                    checkpoint_f3 = torch.load(model_file_f3)
+                    model_file_f2 = os.path.join(w_dir_f2, all_models_f2[i]) #model
+                    checkpoint_f2 = torch.load(model_file_f2)
 
-                    if config.num_join_fingers == 4:
-                        model_file_f4 = os.path.join(w_dir_f4, all_models_f4[i])  #model
-                        checkpoint_f4 = torch.load(model_file_f4)
+                    if config.num_join_fingers >= 3:
+                        model_file_f3 = os.path.join(w_dir_f3, all_models_f3[i]) #model
+                        checkpoint_f3 = torch.load(model_file_f3)
+
+                        if config.num_join_fingers == 4:
+                            model_file_f4 = os.path.join(w_dir_f4, all_models_f4[i])  #model
+                            checkpoint_f4 = torch.load(model_file_f4)
 
 
-                self.net_photo_f1.load_state_dict(checkpoint_f1["net_photo"])
-                self.net_print_f1.load_state_dict(checkpoint_f1["net_print"])
+                    self.net_photo_f1.load_state_dict(checkpoint_f1["net_photo"])
+                    self.net_print_f1.load_state_dict(checkpoint_f1["net_print"])
 
-                self.net_photo_f2.load_state_dict(checkpoint_f2["net_photo"])
-                self.net_print_f2.load_state_dict(checkpoint_f2["net_print"])
+                    self.net_photo_f2.load_state_dict(checkpoint_f2["net_photo"])
+                    self.net_print_f2.load_state_dict(checkpoint_f2["net_print"])
 
-                if config.num_join_fingers >=3:
-                    self.net_photo_f3.load_state_dict(checkpoint_f3["net_photo"])
-                    self.net_print_f3.load_state_dict(checkpoint_f3["net_print"])
+                    if config.num_join_fingers >=3:
+                        self.net_photo_f3.load_state_dict(checkpoint_f3["net_photo"])
+                        self.net_print_f3.load_state_dict(checkpoint_f3["net_print"])
 
-                    if config.num_join_fingers == 4:
-                        self.net_photo_f4.load_state_dict(checkpoint_f4["net_photo"])
-                        self.net_print_f4.load_state_dict(checkpoint_f4["net_print"])
+                        if config.num_join_fingers == 4:
+                            self.net_photo_f4.load_state_dict(checkpoint_f4["net_photo"])
+                            self.net_print_f4.load_state_dict(checkpoint_f4["net_print"])
 
-                print(model_file_f1)
-                print(model_file_f2)
-                if config.num_join_fingers >=3:
-                    print(model_file_f3)
-                    if config.num_join_fingers ==4: print(model_file_f4)
+                    if j == 0:
+                        print(model_file_f1)
+                        print(model_file_f2)
+                        if config.num_join_fingers >=3:
+                            print(model_file_f3)
+                            if config.num_join_fingers ==4: print(model_file_f4)
 
-                self.test()
+                    ls_sq_dist, ls_labels = self.test()
+                    ls_sq_dist = torch.cat(ls_sq_dist, dim=0)
+                    ls_each_test_aug_dist.append(ls_sq_dist)
+
+                if config.is_test_augment == True:
+                    ls_sq_dist = simple_average(min_max_normalization(ls_each_test_aug_dist))
+                    ls_labels = torch.cat(ls_labels, 0)
+
+                    print("augmented result: ", end="")
+                    calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
+                    if is_final_ensemble: ls_final_ensemble.append(ls_sq_dist)
                 
+
+            if is_final_ensemble:
+                ls_sq_dist = simple_average(min_max_normalization(ls_final_ensemble))
+                print(">>>>>>>>>>>>>>>>>>> Final ensemble <<<<<<<<<<<<<<<<")
+                calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
+
 
     def test(self):
         self.net_photo_f1.eval()
@@ -315,11 +387,7 @@ class VerifTest:
                 ls_labels.append((1 - label).data)
             
         calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
-        #self.plot_roc()
-
-    # plotting roc curve 
-    def plot_roc(self):
-        pass 
+        return ls_sq_dist, ls_labels
 
 
 def min_max_normalization(ls_each_finger_dist):

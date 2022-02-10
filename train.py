@@ -5,7 +5,6 @@ from tqdm import tqdm
 import config 
 from torch.autograd import Variable
 from model import *
-from utils_wvu_old import *
 import torch.nn.functional as F
 import dataset_wvu
 from  torch.optim.lr_scheduler import ExponentialLR
@@ -85,7 +84,7 @@ class VerifTrain:
         self.scheduler = ExponentialLR(self.optimizer_G, gamma=0.9)
 
         if config.is_load_model:
-            print("loading pretrained model ...")
+            print("loading pretrained model from: ", config.save_w_name)
             load_saved_model_for_finetuing(self.net_photo, self.net_print, 
                                     self.disc_photo, self.disc_print, 
                                     is_disc_load=True, partial_finetune=config.partial_finetune) 
@@ -105,7 +104,7 @@ class VerifTrain:
                 img_photo = img_photo.to(config.device)
                 img_print = img_print.to(config.device)
                 label = label.to(config.device)
-                #plot_tensors([img_photo[2], img_print[2]], title="check")
+                plot_tensors([img_photo[2], img_print[2]], title="check")
 
                 _, embd_photo = self.net_photo(img_photo)
                 _, embd_print = self.net_print(img_print)
@@ -194,7 +193,7 @@ class VerifTrain:
         G_loss.backward()
         return dist_sq, con_loss,l2_loss, id_loss, G_loss
 
-
+        
     def train(self):
         train_loop = tqdm(self.train_loader)
         Tensor = torch.cuda.FloatTensor
@@ -260,16 +259,7 @@ class VerifTrain:
 
             
             if (config.is_save_model and epoch >= config.start_saving_epoch):
-                """
-                auc, eer = self.validate() 
-                saving_auc = 0.73
 
-                if (auc > saving_auc):
-                    save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
-                        self.disc_photo, self.disc_print, epoch, is_best=True)
-                """
-
-                #if (epoch % 20 == 0):
                 save_model(self.net_photo, self.net_print, self.fidentity, self.optimizer_G, 
                         self.disc_photo, self.disc_print, epoch, is_best=False)
 

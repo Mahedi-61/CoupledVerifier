@@ -98,7 +98,7 @@ def load_saved_model_for_finetuing(net_photo, net_print, disc_photo, disc_print,
              save_w_dir = os.path.join(config.new_weights_dir, config.save_w_name)
 
     else:
-        save_w_dir = os.path.join(config.old_weights_dir, config.save_w_name)
+        save_w_dir = config.save_w_dir
 
 
     if config.is_convert_one_to_many == False: 

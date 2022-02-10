@@ -54,16 +54,23 @@ class WVUFingerDataset(Dataset):
             fill_photo = (0, )
 
         if train == True:
-            # Resize
-            resize = transforms.Resize(size=(286, 286))
-            photo = resize(photo)
-            print = resize(print)
 
-            # Random crop
-            i, j, h, w = transforms.RandomCrop.get_params(
-                            photo, output_size=(config.img_size, config.img_size))
-            photo = TF.crop(photo, i, j, h, w)
-            print = TF.crop(print, i, j, h, w)
+            # Resize
+            if random.random() > 0.5:
+                resize = transforms.Resize(size=(286, 286))
+                photo = resize(photo)
+                print = resize(print)
+
+                # Random crop
+                i, j, h, w = transforms.RandomCrop.get_params(
+                                photo, output_size=(config.img_size, config.img_size))
+                photo = TF.crop(photo, i, j, h, w)
+                print = TF.crop(print, i, j, h, w)
+
+            else:
+                resize = transforms.Resize(size=(config.img_size, config.img_size))
+                photo = resize(photo)
+                print = resize(print)
 
             # Random horizontal flipping
             if random.random() > 0.5:

@@ -1,25 +1,20 @@
 import numpy as np 
 import torch
 from torch.utils.data import DataLoader 
-from torchvision import transforms 
 import config 
 from model import *
 import os
-import utils_wvu_old
 import dataset_wvu_test
 
-is_ensemble = False
+if config.dataset_name == "wvu_old":
+    from utils_wvu_old import *
+elif config.dataset_name == "wvu_new":
+    from utils_wvu_new import * 
+
+is_ensemble = True             
 
 class VerifTest:
     def __init__(self):
-        print("loading dataset ...")
-        self.test_loader = DataLoader(
-            dataset_wvu_test.WVUFingerDatasetForTest(is_fixed = True),
-            batch_size=config.batch_size, 
-            shuffle=False,
-            pin_memory=True,
-            num_workers= 6  
-        )
 
         self.net_photo, self.net_print = get_model(config.w_name, img_dim=config.img_dim)
 
@@ -34,28 +29,53 @@ class VerifTest:
                 model_file = os.path.join(w_dir, model)
                 checkpoint = torch.load(model_file)
 
-                if config.is_convert_one_to_many == True:
+                #loads weights trained of one finger to the weights for multi-finger
+                if (config.is_finetune == False and 
+                    config.is_convert_one_to_many == True and
+                    config.num_join_fingers >= 2):
+
                     compatible_load(checkpoint, self.net_photo, self.net_print, disc_photo = None, 
-                                 disc_print = None, w_name = config.w_name, is_disc_load=True) 
+                                 disc_print = None, w_name = config.w_name, is_disc_load=False) 
 
                 else:
                     self.net_photo.load_state_dict(checkpoint["net_photo"])
                     self.net_print.load_state_dict(checkpoint["net_print"])
 
+
                 print(model_file)
-                if is_ensemble == False:
-                    ls_sq_dist, ls_labels = self.test()
-                
-                elif is_ensemble == True:
+                del checkpoint
+                ls_each_finger_per_model_dist = []
+
+                for i in range(config.num_test_aug):
+                    self.test_loader = DataLoader(
+                        dataset_wvu_test.WVUFingerDatasetForTest(test_aug_id=i, is_fixed = True),
+                        batch_size=config.batch_size, 
+                        shuffle=False,
+                        pin_memory=True,
+                        num_workers= 6)
+
                     ls_sq_dist, ls_labels = self.test()
                     ls_sq_dist = torch.cat(ls_sq_dist, dim=0)
+                    ls_each_finger_per_model_dist.append(ls_sq_dist)
+
+                if config.is_test_augment == True:
+                    ls_sq_dist = simple_average(min_max_normalization(ls_each_finger_per_model_dist))
+                    ls_labels = torch.cat(ls_labels, 0)
+
+                    print("augmented result: ", end="")
+                    calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
+                
+                if is_ensemble == True:
                     ls_each_finger_dist.append(ls_sq_dist)
+
 
             if is_ensemble == True: 
                 print(">>>>>>>>>>>>>>> Fusion <<<<<<<<<<<<<<<")
                 ls_each_finger_dist = min_max_normalization(ls_each_finger_dist)
                 ls_sq_dist = simple_average(ls_each_finger_dist)
-                utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
+
+                if config.is_test_augment == False: ls_labels = torch.cat(ls_labels, 0)
+                calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
 
 
     def test(self):
@@ -80,7 +100,7 @@ class VerifTest:
                 ls_sq_dist.append(dist_sq.data)
                 ls_labels.append((1 - label).data)
             
-        utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
+        calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
         return ls_sq_dist, ls_labels
 
 

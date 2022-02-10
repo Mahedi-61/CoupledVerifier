@@ -145,9 +145,10 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
 
             index += 1
 
-    print("Joint Fingers ID: ", ls_fnums)
-    print("Number of Data: ", len(photo_finger_dict))
-    print(len(print_finger_dict))
+    if (config.is_test_augment == False):
+        print("Joint Fingers ID: ", ls_fnums)
+        print("Number of Data: ", len(photo_finger_dict))
+
     return photo_finger_dict, print_finger_dict
 
 
@@ -157,10 +158,12 @@ def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
     
     if is_ensemble == False: 
         pred_ls = torch.cat(ls_sq_dist, 0)
+        true_label = torch.cat(ls_labels, 0)
+
     elif is_ensemble == True:
         pred_ls = ls_sq_dist
+        true_label = ls_labels
         
-    true_label = torch.cat(ls_labels, 0)
     pred_ls = pred_ls.cpu().detach().numpy()
     true_label = true_label.cpu().detach().numpy() 
     
@@ -178,5 +181,5 @@ def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
 if __name__ == "__main__":
     #t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
-    ph_dict, pr_dict =  get_multiple_img_dict(config.train_photo_dir, 
-                            config.train_print_dir, [["7", "8", "9"]]) 
+    ph_dict, pr_dict =  get_multiple_img_dict(config.test_photo_dir, 
+                            config.test_print_dir, [["8"]]) 

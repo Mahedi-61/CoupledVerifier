@@ -1,3 +1,4 @@
+from operator import truediv
 import numpy as np 
 import torch
 from torch.utils.data import Dataset
@@ -6,6 +7,8 @@ import config
 from PIL import Image 
 from collections import OrderedDict
 import random 
+import torchvision.transforms.functional as TF
+
 
 if config.dataset_name == "wvu_old":
     from utils_wvu_old import *
@@ -16,10 +19,9 @@ elif config.dataset_name == "wvu_new":
 
 ## Special Class for Fixed Test set and results
 class WVUFingerDatasetForTest(Dataset):
-    def __init__(self, is_fixed = True):
+    def __init__(self, test_aug_id, is_fixed = True):
         super().__init__()
 
-        print("test data loading ...")
         if config.num_join_fingers == 1 and config.is_one_fid == False:
             self.dict_photo, self.dict_print = get_img_dict(
             config.test_photo_dir, config.test_print_dir)
@@ -29,22 +31,65 @@ class WVUFingerDatasetForTest(Dataset):
             config.test_photo_dir, config.test_print_dir, config.fnums)
 
         self.is_fixed = is_fixed 
-        print("Dataset: ", config.dataset_name)
-        print("experiment type: test")
-        print("Number of Fingers IDs: ", len(self.dict_photo))
-        print("Number of Fingers:", config.num_join_fingers)
-        print("Network Arch:", config.w_name.split("_")[-1])
-        print("loading models from: ", config.w_name)
-        print("Number of imposter pair: ", config.num_pair_test)
 
-        self.test_trans = transforms.Compose([
-            transforms.Resize((config.img_size, config.img_size)), 
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
-        ])
+        if config.is_display == True:
+            print("Dataset: ", config.dataset_name)
+            print("experiment type: test")
+            print("Number of Fingers IDs: ", len(self.dict_photo))
+            print("Number of Fingers:", config.num_join_fingers)
+            print("Network Arch:", config.w_name.split("_")[-1])
+            print("loading models from: ", config.w_name)
+            print("Number of imposter pair: ", config.num_pair_test)
+            config.is_display = False 
 
-        self.dict_print = OrderedDict(sorted(self.dict_print.items()))
+        self.dict_print = OrderedDict(sorted(self.dict_print.items()))        
         self.new_imposter_pos = 0
+        self.test_aug_id = test_aug_id
+
+
+    def test_trans(self, photo, print):
+        """
+         0: only (256, 256) resized images
+         1: (256, 256) h-flip resized images
+         2: (286, 286) resized (256, 256) center crop images
+        """
+
+        # Resize
+        if self.test_aug_id <= 1:
+            resize = transforms.Resize(size=(config.img_size, config.img_size))
+            photo = resize(photo)
+            print = resize(print)
+        
+        else:
+            resize = transforms.Resize(size=(286, 286))
+            photo = resize(photo)
+            print = resize(print)
+
+        # Random horizontal flipping
+        if self.test_aug_id == 1 or self.test_aug_id == 3:
+            photo = TF.hflip(photo)
+            print = TF.hflip(print)
+
+        if self.test_aug_id >= 2: 
+            # center crop
+            if self.test_aug_id == 2: i, j = (15, 15)
+            if self.test_aug_id == 3: i, j = (15, 15)
+            h=config.img_size
+            w=config.img_size
+            photo = TF.crop(photo, i, j, h, w)
+            print = TF.crop(print, i, j, h, w)
+
+
+        # Transform to tensor
+        photo = TF.to_tensor(photo)
+        print = TF.to_tensor(print)
+
+        # normalize
+        normalize = transforms.Normalize(mean = [0.5], std = [0.5])
+        photo = normalize(photo)
+        print = normalize(print)
+
+        return photo, print
 
 
     def __len__(self):
@@ -90,36 +135,44 @@ class WVUFingerDatasetForTest(Dataset):
         if config.num_join_fingers == 1:
             ph_f = Image.open(photo_image).convert("L")
             pr_f = Image.open((self.dict_print[class_id])[0]).convert("L")
-
-            img1 = self.test_trans(ph_f)
-            img2 = self.test_trans(pr_f)
+            img1, img2 = self.test_trans(ph_f, pr_f)
 
         elif config.num_join_fingers >= 2:
             print_image = self.dict_print[class_id]
 
-            ph_f1 = self.test_trans(Image.open(photo_image[0]).convert("L")) 
-            ph_f2 = self.test_trans(Image.open(photo_image[1]).convert("L"))
-            pr_f1 = self.test_trans(Image.open(print_image[0]).convert("L")) 
-            pr_f2 = self.test_trans(Image.open(print_image[1]).convert("L"))
+            ph_f1 = Image.open(photo_image[0]).convert("L") 
+            ph_f2 = Image.open(photo_image[1]).convert("L")
+            pr_f1 = Image.open(print_image[0]).convert("L") 
+            pr_f2 = Image.open(print_image[1]).convert("L")
+
+            ph_f1, pr_f1 = self.test_trans(ph_f1, pr_f1)
+            ph_f2, pr_f2 = self.test_trans(ph_f2, pr_f2)
 
             if config.num_join_fingers == 2:
                 img1 = torch.cat([ph_f1, ph_f2], dim=0)
                 img2 = torch.cat([pr_f1, pr_f2], dim=0)
 
             else:
-                ph_f3 = self.test_trans(Image.open(photo_image[2]).convert("L"))
-                pr_f3 = self.test_trans(Image.open(print_image[2]).convert("L"))
+                ph_f3 = Image.open(photo_image[2]).convert("L")
+                pr_f3 = Image.open(print_image[2]).convert("L")
+                ph_f3, pr_f3 = self.test_trans(ph_f3, pr_f3)
 
                 if config.num_join_fingers == 3:
                     img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=0)
                     img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
 
                 else:
-                    ph_f4 = self.test_trans(Image.open(photo_image[3]).convert("L"))
-                    pr_f4 = self.test_trans(Image.open(print_image[3]).convert("L"))
+                    ph_f4 = Image.open(photo_image[3]).convert("L")
+                    pr_f4 = Image.open(print_image[3]).convert("L")
+                    ph_f4, pr_f4 = self.test_trans(ph_f4, pr_f4)
 
                     if config.num_join_fingers == 4:
                         img1 = torch.cat([ph_f1, ph_f2, ph_f3, ph_f4], dim=0)
                         img2 = torch.cat([pr_f1, pr_f2, pr_f3, pr_f4], dim=0)
 
         return img1, img2, same_class
+
+
+
+if __name__ == "__main__":
+    db = WVUFingerDatasetForTest(is_fixed=True)

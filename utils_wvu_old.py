@@ -6,6 +6,7 @@ import os
 from sklearn import metrics
 import numpy as np 
 import math
+from collections import OrderedDict
 irange = range
 
 class AverageMeter():
@@ -127,35 +128,39 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
             all_sub_finger[sub_id].append(fnum)
 
     index = 0
+    all_sub_finger = OrderedDict(sorted(all_sub_finger.items()))
     for key in list(all_sub_finger.keys()):
         for fnums in ls_fnums:
             if set(fnums).issubset(set(all_sub_finger[key])):
                 first_f_dir = os.path.join(photo_path, key + "_" + fnums[0])
                 first_f_img = os.path.join(first_f_dir, os.listdir(first_f_dir)[0])
 
+                dict_key = key + "_" + str(index)
+                
                 if config.num_join_fingers == 1:
-                    photo_finger_dict[index] = [key, first_f_img]
+                    photo_finger_dict[index] = [dict_key, first_f_img]
 
                 else:
                     second_f_dir = os.path.join(photo_path, key + "_" + fnums[1])
                     second_f_img = os.path.join(second_f_dir, os.listdir(second_f_dir)[0]) 
 
                     if config.num_join_fingers == 2:
-                        photo_finger_dict[index] = [key, [first_f_img, second_f_img]]
+                        photo_finger_dict[index] = [dict_key, [first_f_img, second_f_img]]
                     
                     else:
                         third_f_dir = os.path.join(photo_path, key + "_" + fnums[2])
                         third_f_img = os.path.join(third_f_dir, os.listdir(third_f_dir)[0])
 
                         if config.num_join_fingers == 3:
-                            photo_finger_dict[index] = [key, [first_f_img, 
+                            photo_finger_dict[index] = [dict_key, [first_f_img, 
                                                                 second_f_img, third_f_img]] 
 
                         else:
                             fourth_f_dir = os.path.join(photo_path, key + "_" + fnums[3])
                             fourth_f_img = os.path.join(fourth_f_dir, os.listdir(fourth_f_dir)[0])
+
                             if config.num_join_fingers == 4:
-                                photo_finger_dict[index] = [key, [first_f_img, 
+                                photo_finger_dict[index] = [dict_key, [first_f_img, 
                                                     second_f_img, third_f_img, fourth_f_img]] 
 
                 # for print
@@ -163,50 +168,48 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
                 first_f_img = os.path.join(first_f_dir, os.listdir(first_f_dir)[0])
 
                 if config.num_join_fingers == 1:
-                    print_finger_dict[key] = [first_f_img]
-                    index += 1
-                    break
+                    print_finger_dict[dict_key] = [first_f_img]
+                        
+                elif config.num_join_fingers >= 2:
+                    second_f_dir = os.path.join(print_path, key + "_" + fnums[1])
+                    second_f_img = os.path.join(second_f_dir, os.listdir(second_f_dir)[0]) 
 
-                second_f_dir = os.path.join(print_path, key + "_" + fnums[1])
-                second_f_img = os.path.join(second_f_dir, os.listdir(second_f_dir)[0]) 
+                    if config.num_join_fingers == 2:
+                        print_finger_dict[dict_key] = [first_f_img, second_f_img]
+                        
+                    elif config.num_join_fingers >= 3:
+                        third_f_dir = os.path.join(print_path, key + "_" + fnums[2])
+                        third_f_img = os.path.join(third_f_dir, os.listdir(third_f_dir)[0]) 
 
-                if config.num_join_fingers == 2:
-                    print_finger_dict[key] = [first_f_img, second_f_img]
-                    index += 1
-                    break
+                        if config.num_join_fingers == 3:
+                            print_finger_dict[dict_key] = [first_f_img, second_f_img, third_f_img]
+                            
+                        elif config.num_join_fingers == 4:
+                            fourth_f_dir = os.path.join(print_path, key + "_" + fnums[3])
+                            fourth_f_img = os.path.join(fourth_f_dir, os.listdir(fourth_f_dir)[0]) 
 
-                third_f_dir = os.path.join(print_path, key + "_" + fnums[2])
-                third_f_img = os.path.join(third_f_dir, os.listdir(third_f_dir)[0]) 
-
-                if config.num_join_fingers == 3:
-                    print_finger_dict[key] = [first_f_img, 
-                                                    second_f_img, third_f_img]
-                    index += 1
-                    break
-
-                fourth_f_dir = os.path.join(print_path, key + "_" + fnums[3])
-                fourth_f_img = os.path.join(fourth_f_dir, os.listdir(fourth_f_dir)[0]) 
-
-                if config.num_join_fingers == 4:
-                    print_finger_dict[key] = [first_f_img, 
-                                            second_f_img, third_f_img, fourth_f_img]
-                    index += 1
-
+                            print_finger_dict[dict_key] = [first_f_img, 
+                                                    second_f_img, third_f_img, fourth_f_img]
                 
-    print("Joint Fingers ID: ", ls_fnums)
-    print("Number of Data: ", len(photo_finger_dict))
+                index += 1
+
+    if config.is_test_augment == False: 
+        print("Joint Fingers ID: ", ls_fnums)
+        print("Number of Data: ", len(photo_finger_dict))
+        
     return photo_finger_dict, print_finger_dict
 
 
 # calculating scores 
 def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
- 
-    true_label = torch.cat(ls_labels, 0)
+    
     if is_ensemble == False: 
         pred_ls = torch.cat(ls_sq_dist, 0)
+        true_label = torch.cat(ls_labels, 0)
 
     elif is_ensemble == True:
         pred_ls = ls_sq_dist
+        true_label = ls_labels
 
     pred_ls = pred_ls.cpu().detach().numpy()
     true_label = true_label.cpu().detach().numpy() 
@@ -334,7 +337,7 @@ if __name__ == "__main__":
     #a = AverageMeter()
 
     ph_d, pr_d = get_multiple_img_dict(config.train_photo_dir, 
-                                config.train_print_dir, [["8"]])
+                    config.train_print_dir, [["2", "3", "8", "7"]])
     
     print(len(ph_d))
     print(len(pr_d))
