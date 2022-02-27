@@ -147,3 +147,4 @@ class VerifTrain:
 if __name__ == "__main__":
     t = VerifTrain()
     t.train()
+

@@ -2,24 +2,24 @@ import os
 import torch 
 
 #conditions
-dataset_name = "pretrain" #wvu_new, wvu_old
+dataset_name = "wvu_old" #wvu_new, wvu_old
 photo_type = ""
 if dataset_name == "wvu_new": photo_type = "v" #vfp
 
 is_train = True                                                                                                                                                                                                                             
-is_load_model = False                                                                                    
+is_load_model = False                                                                                     
 is_one_fid = False        #train and test only on finger ID 
 partial_finetune = False  # only finetuning the last layer of the pretrained model
-is_finetune = False             
+is_finetune = True             
 is_convert_one_to_many = False                                                                                    
 num_join_fingers = 1
 
 fnums =  [[""]]                                                                    
-w_name = "F1_D3_A1"  #weight save --> train | weights load --> test
+w_name = "F1_D1_A1"  #weight save --> train | weights load --> test
 
  #weights for initialization
-save_w_name = ""
-conversion_type = ""
+save_w_name = "F1_D3_A1"
+conversion_type = "PvsO"
 
 # for testing 
 is_all_pairs = False                   
@@ -28,7 +28,7 @@ num_test_aug = 2
 is_test_augment = True
 is_ensemble = False         
 
-load_weights_nist = False 
+load_pretrain_weights = True  
 multi_gpus = True  
 img_dim = num_join_fingers
 is_save_model = is_train 
@@ -38,12 +38,12 @@ if is_test_augment == False: num_test_aug = 1
 # training parameters
 is_display = True 
 num_imposter = 2
-num_pair_test = 30
+num_pair_test = 50
 batch_size = 384    
-learning_rate = 0.0002
+learning_rate = 0.00015
 weight_decay = 5e-4
-num_epochs = 500 
-start_saving_epoch = 300
+num_epochs = 400 
+start_saving_epoch = 80
 
 if is_all_pairs:
     if dataset_name == "wvu_old":
@@ -93,7 +93,7 @@ elif dataset_name == "wvu_new":
 
 elif dataset_name == "pretrain":
     train_dataset = "pretrain_final"
-    test_dataset = "clean_13_as_test"
+    test_dataset = "amar_clean_r60_as_test"
 
 
 train_photo_dir = os.path.join(datasets_dir, train_dataset, "photo")

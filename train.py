@@ -26,16 +26,8 @@ class VerifTrain:
             num_workers= 6  
         )
 
-        self.val_loader = DataLoader(
-            dataset_wvu.WVUFingerDataset(train = not config.is_train),
-            batch_size=config.batch_size, 
-            shuffle=False,
-            pin_memory=True,
-            num_workers= 6  
-        )
-
-        print("experiment type: train")
-        print("Dataset: %s and Type: %s" % (config.dataset_name, config.train_dataset))
+        print("Dataset: ", config.dataset_name)
+        print("Experiment Type: Train | Set:", config.train_dataset)
         print("Number of Fingers: ", config.num_join_fingers)
         print("Network Arch:", config.w_name.split("_")[-1])
         print("Savging model in: ", config.w_name)
@@ -85,8 +77,8 @@ class VerifTrain:
         self.scheduler = ExponentialLR(self.optimizer_G, gamma=0.9)
         #print(self.net_photo.state_dict().keys())
 
-        if config.load_weights_nist and config.is_finetune:
-            print("loading pretrained NIST weights")
+        if config.load_pretrain_weights and config.is_finetune:
+            print("loading pretrained weights form", config.save_w_dir.split("/")[-3:])
             model_file = os.path.join(config.save_w_dir, "best_model_000.pth")
             checkpoint = torch.load(model_file)
 
@@ -105,34 +97,6 @@ class VerifTrain:
                                     self.disc_photo, self.disc_print, 
                                     is_disc_load=True, partial_finetune=config.partial_finetune) 
         
-
-    def validate(self):
-        self.net_photo.eval()
-        self.net_print.eval()
-
-        ls_sq_dist = []
-        ls_labels = []
-        
-        with torch.no_grad(): 
-            for img_photo, img_print, label in self.val_loader:
-                label = label.type(torch.float)
-
-                img_photo = img_photo.to(config.device)
-                img_print = img_print.to(config.device)
-                label = label.to(config.device)
-                plot_tensors([img_photo[2], img_print[2]], title="check")
-
-                _, embd_photo = self.net_photo(img_photo)
-                _, embd_print = self.net_print(img_print)
-
-                dist_sq = torch.sum(torch.pow(embd_photo - embd_print, 2), dim=1) #torch.sqrt()
-                ls_sq_dist.append(dist_sq.data)
-                ls_labels.append((1 - label).data)
-
-        auc, eer =  calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
-        self.net_photo.train()
-        self.net_print.train() 
-        return auc, eer
 
 
     def contrastive_loss(self, embd_photo, embd_print, label):

@@ -155,7 +155,7 @@ class PretrainFingerDatasetForTest(Dataset):
 
         if config.is_display == True:
             print("Dataset: ", config.dataset_name)
-            print("experiment type: test")
+            print("experiment type: test | test dataset: ", config.test_dataset)
             print("Number of Fingers IDs: ", len(self.dict_print))
             print("Number of Fingers:", config.num_join_fingers)
             print("Network Arch:", config.w_name.split("_")[-1])
