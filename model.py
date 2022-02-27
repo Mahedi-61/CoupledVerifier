@@ -1,36 +1,42 @@
 import torch 
 from torch import nn 
-#from torchsummary import summary
+from torchsummary import summary
 import config 
 import os 
-from network import * 
-#import resnet_cbam
-from efficientnet_v2 import EfficientNet
+
+from nets import resnet, resnet_unet, densenet, attunet
+from nets.efficientnet_v2 import EfficientNet
+from nets import mapper
 
 
 def get_model(w_name, img_dim):
     network_arch = w_name.split("_")[-1]
 
     if network_arch == "A1":
-        net_photo = Mapper(pre_network="resnet18", 
-                            img_dim = img_dim, 
-                            out_dim=config.feature_dim) 
+        net_photo = mapper.Mapper(pre_network="resnet18", 
+                            img_dim = img_dim, out_dim=config.feature_dim) 
 
-        net_print = Mapper(pre_network="resnet18", 
-                            img_dim = img_dim, 
-                            out_dim=config.feature_dim) 
+        net_print = mapper.Mapper(pre_network="resnet18", 
+                            img_dim = img_dim, out_dim=config.feature_dim) 
 
     elif network_arch == "A2":
-        net_photo = AttU_Net(img_dim = img_dim, out_dim=config.feature_dim)
-        net_print = AttU_Net(img_dim = img_dim, out_dim=config.feature_dim) 
+        net_photo = attunet.AttU_Net(img_dim = img_dim, out_dim=config.feature_dim)
+        net_print = attunet.AttU_Net(img_dim = img_dim, out_dim=config.feature_dim) 
 
     elif network_arch == "A3":
         net_photo = EfficientNet(img_dim = img_dim, out_dim=config.feature_dim)
         net_print = EfficientNet(img_dim = img_dim, out_dim=config.feature_dim) 
 
     elif network_arch == "A4":
-        net_photo = ResNetUNet(img_dim = img_dim, out_dim=config.feature_dim)
-        net_print = ResNetUNet(img_dim = img_dim, out_dim=config.feature_dim) 
+        net_photo = resnet_unet.ResNetUNet(img_dim = img_dim, out_dim=config.feature_dim)
+        net_print = resnet_unet.ResNetUNet(img_dim = img_dim, out_dim=config.feature_dim) 
+
+    elif network_arch == "A5":
+        net_photo = mapper.Mapper(pre_network="densenet", 
+                            img_dim = img_dim,  out_dim=config.feature_dim) 
+
+        net_print = mapper.Mapper(pre_network="densenet", 
+                            img_dim = img_dim,  out_dim=config.feature_dim) 
 
     # load in GPU and do parallel
     net_photo.to(config.device)
@@ -47,20 +53,11 @@ def get_one_model(w_name, img_dim):
     network_arch = w_name.split("_")[-1]
 
     if network_arch == "A1":
-        net_print = Mapper(pre_network="resnet18", 
-                            img_dim = img_dim, 
-                            out_dim=config.feature_dim)
+        net_print = resnet.get_model(img_dim = img_dim, out_dim=config.feature_dim)
                             
-        #net_print = resnet_cbam.ResentCBAM(img_dim=config.img_dim, out_dim=config.feature_dim)
 
-    elif network_arch == "A2":
-        net_print = AttU_Net(img_dim = img_dim, out_dim=config.feature_dim) 
-
-    elif network_arch == "A3":
-        net_print = EfficientNet(img_dim = img_dim, out_dim=config.feature_dim) 
-
-    elif network_arch == "A4":
-        net_print = ResNetUNet(img_dim = img_dim, out_dim=config.feature_dim) 
+    elif network_arch == "A5":
+        net_print = densenet.get_model(img_dim = img_dim, out_dim=config.feature_dim) 
 
     # load in GPU and do parallel
     net_print.to(config.device)
@@ -72,10 +69,10 @@ def get_one_model(w_name, img_dim):
 
 
 def get_discriminator(img_dim):
-    disc_photo = Discriminator(in_channels=img_dim)
+    disc_photo = mapper.Discriminator(in_channels=img_dim)
     disc_photo.to(config.device)
         
-    disc_print = Discriminator(in_channels=img_dim)
+    disc_print = mapper.Discriminator(in_channels=img_dim)
     disc_print.to(config.device)
 
     if config.multi_gpus:
@@ -88,7 +85,6 @@ def get_discriminator(img_dim):
 # loading save_w_name to finetune on single or multi-finger, and same or another dataset
 def load_saved_model_for_finetuing(net_photo, net_print, disc_photo, disc_print, 
                                     is_disc_load=True, partial_finetune=False):
-    
     
     if config.is_finetune == False:
         if config.dataset_name == "wvu_old":
@@ -177,95 +173,51 @@ def compatible_load(checkpoint, net_photo, net_print, disc_photo,
     if network_arch == "A1":
         # photo
         net_photo_state_dict = checkpoint["net_photo"]
-        first_conv_weights = net_photo_state_dict["module.backbone.0.weight"]
+        first_conv_key = "module.backbone.backbone.0.weight"
+        first_conv_weights = [net_photo_state_dict[first_conv_key] 
+                                        for _ in range(config.num_join_fingers)]
 
-        if config.num_join_fingers == 2:
-            net_photo_state_dict["module.backbone.0.weight"] = torch.cat((
-                                    first_conv_weights, first_conv_weights), dim=1)
+        net_photo_state_dict[first_conv_key] = torch.cat(first_conv_weights, dim=1)
 
-        elif config.num_join_fingers == 3:
-            net_photo_state_dict["module.backbone.0.weight"] = torch.cat((
-                first_conv_weights, first_conv_weights, first_conv_weights), dim=1)
 
-        elif config.num_join_fingers == 4:
-            net_photo_state_dict["module.backbone.0.weight"] = torch.cat((
-            first_conv_weights, first_conv_weights, first_conv_weights, first_conv_weights), dim=1)
+        last_conv_key = "module.decoder.25.weight"
+        last_conv_weights = [net_photo_state_dict[last_conv_key] 
+                                        for _ in range(config.num_join_fingers)]
+        
+        net_photo_state_dict[last_conv_key] = torch.cat(last_conv_weights, dim=0)
 
-        last_conv_weights = net_photo_state_dict["module.decoder.25.weight"]
 
-        if config.num_join_fingers == 2:
-            net_photo_state_dict["module.decoder.25.weight"] = torch.cat((
-                                    last_conv_weights, last_conv_weights), dim=0)
+        last_bias_key = "module.decoder.25.bias"
+        last_bias = [net_photo_state_dict[last_bias_key] 
+                                        for _ in range(config.num_join_fingers)]
 
-        elif config.num_join_fingers == 3:
-            net_photo_state_dict["module.decoder.25.weight"] = torch.cat((
-                    last_conv_weights, last_conv_weights, last_conv_weights), dim=0)
-
-        elif config.num_join_fingers == 4:
-            net_photo_state_dict["module.decoder.25.weight"] = torch.cat((
-            last_conv_weights, last_conv_weights, last_conv_weights, last_conv_weights), dim=0)
-
-        last_bias = net_photo_state_dict["module.decoder.25.bias"]
-
-        if config.num_join_fingers == 2:
-            net_photo_state_dict["module.decoder.25.bias"] = torch.cat((
-                                    last_bias, last_bias), dim=0)
-
-        elif config.num_join_fingers == 3:
-            net_photo_state_dict["module.decoder.25.bias"] = torch.cat((
-                            last_bias, last_bias, last_bias), dim=0)
-
-        elif config.num_join_fingers == 4:
-            net_photo_state_dict["module.decoder.25.bias"] = torch.cat((
-                        last_bias, last_bias, last_bias, last_bias), dim=0)
-
+        net_photo_state_dict[last_bias_key] = torch.cat(last_bias, dim=0)
         net_photo.load_state_dict(net_photo_state_dict)
+
 
         # print
         net_print_state_dict = checkpoint["net_print"]
-        first_conv_weights = net_print_state_dict["module.backbone.0.weight"]
-
-        if config.num_join_fingers == 2:
-            net_print_state_dict["module.backbone.0.weight"] = torch.cat((
-                                    first_conv_weights, first_conv_weights), dim=1)
-
-        elif config.num_join_fingers == 3:
-            net_print_state_dict["module.backbone.0.weight"] = torch.cat((
-                first_conv_weights, first_conv_weights, first_conv_weights), dim=1)
-
-        elif config.num_join_fingers == 4:
-            net_print_state_dict["module.backbone.0.weight"] = torch.cat((
-            first_conv_weights, first_conv_weights, first_conv_weights, first_conv_weights), dim=1)
-
-        last_conv_weights = net_print_state_dict["module.decoder.25.weight"]
-
-        if config.num_join_fingers == 2:
-            net_print_state_dict["module.decoder.25.weight"] = torch.cat((
-                                    last_conv_weights, last_conv_weights), dim=0)
+        first_conv_key = "module.backbone.backbone.0.weight"
+        first_conv_weights = [net_print_state_dict[first_conv_key] 
+                                        for _ in range(config.num_join_fingers)]
         
-        elif config.num_join_fingers == 3:
-            net_print_state_dict["module.decoder.25.weight"] = torch.cat((
-                last_conv_weights, last_conv_weights, last_conv_weights), dim=0)
+        net_print_state_dict[first_conv_key] = torch.cat(first_conv_weights, dim=1)
+
+
+        last_conv_key = "module.decoder.25.weight"
+        last_conv_weights = [net_print_state_dict[last_conv_key] 
+                                        for _ in range(config.num_join_fingers)]
+
+        net_print_state_dict[last_conv_key] = torch.cat(last_conv_weights, dim=0)
         
-        elif config.num_join_fingers == 4:
-            net_print_state_dict["module.decoder.25.weight"] = torch.cat((
-            last_conv_weights, last_conv_weights, last_conv_weights, last_conv_weights), dim=0)
 
-        last_bias = net_print_state_dict["module.decoder.25.bias"]
+        last_bias_key = "module.decoder.25.bias"
+        last_bias = [net_print_state_dict[last_bias_key]  
+                                        for _ in range(config.num_join_fingers)]
 
-        if config.num_join_fingers == 2:
-            net_print_state_dict["module.decoder.25.bias"] = torch.cat((
-                                    last_bias, last_bias), dim=0)
-
-        elif config.num_join_fingers == 3:
-            net_print_state_dict["module.decoder.25.bias"] = torch.cat((
-                                    last_bias, last_bias, last_bias), dim=0)
-        
-        elif config.num_join_fingers == 4:
-            net_print_state_dict["module.decoder.25.bias"] = torch.cat((
-                            last_bias, last_bias, last_bias, last_bias), dim=0)
-
+        net_print_state_dict[last_bias_key] = torch.cat(last_bias, dim=0)
         net_print.load_state_dict(net_print_state_dict)
+
 
     elif network_arch == "A2":
         # photo
@@ -381,6 +333,18 @@ def compatible_load(checkpoint, net_photo, net_print, disc_photo,
         disc_print.load_state_dict(disc_print_state_dict)
 
 
+
+def load_single_model_for_finetuing(net_print):
+    save_w_dir = config.save_w_dir
+
+
+    if config.is_convert_one_to_many == False: 
+        loaded_model_file = os.path.join(save_w_dir, "best_model_000.pth")
+        checkpoint = torch.load(loaded_model_file)
+        net_print.load_state_dict(checkpoint["net_print"])
+        
+
+
 class FingerIdentity(nn.Module):
     def __init__(self):
         super().__init__()
@@ -391,8 +355,19 @@ class FingerIdentity(nn.Module):
         return self.model(dis)
 
 
+class WeightedFusion(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = nn.Sequential(nn.Linear(10, 1))
+
+    def forward(self, x):
+        return self.model(x)
+
+
+
 if __name__ == "__main__":
-    m = FingerIdentity()
-    x1 = torch.randn((256))
-    x2 = torch.randn((256))
-    #summary(model, input_size=(256, 256))
+    model = mapper.Mapper(pre_network="resnet18", 
+                            img_dim = 1, out_dim=config.feature_dim) 
+
+    print(model.backbone)
+    summary(model, input_size=(1, 256, 256), device="cpu")

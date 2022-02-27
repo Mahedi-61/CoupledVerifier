@@ -54,6 +54,12 @@ class WVUFingerDatasetForTest(Dataset):
          2: (286, 286) resized (256, 256) center crop images
         """
 
+        fill_photo = (255,)
+        fill_print = (255,)
+
+        if config.dataset_name == "wvu_new" and config.photo_type == "vfp":
+            fill_photo = (0, )
+
         # Resize
         if self.test_aug_id <= 1:
             resize = transforms.Resize(size=(config.img_size, config.img_size))
@@ -70,15 +76,24 @@ class WVUFingerDatasetForTest(Dataset):
             photo = TF.hflip(photo)
             print = TF.hflip(print)
 
-        if self.test_aug_id >= 2: 
+        """
+        if self.test_aug_id == 2 or self.test_aug_id == 3: 
             # center crop
-            if self.test_aug_id == 2: i, j = (15, 15)
-            if self.test_aug_id == 3: i, j = (15, 15)
+            i, j = (15, 15)
+
             h=config.img_size
             w=config.img_size
+
             photo = TF.crop(photo, i, j, h, w)
             print = TF.crop(print, i, j, h, w)
+        """
 
+        if self.test_aug_id == 2 and self.test_aug_id == 3:
+            if self.test_aug_id == 2: angle = 10
+            elif self.test_aug_id == 3: angle = -10
+            photo = TF.rotate(photo, angle, fill=fill_photo)
+            print = TF.rotate(print, angle, fill=fill_print)
+        
 
         # Transform to tensor
         photo = TF.to_tensor(photo)

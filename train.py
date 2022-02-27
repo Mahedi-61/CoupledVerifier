@@ -8,6 +8,7 @@ from model import *
 import torch.nn.functional as F
 import dataset_wvu
 from  torch.optim.lr_scheduler import ExponentialLR
+from collections import OrderedDict
 
 if config.dataset_name == "wvu_old":
     from utils_wvu_old import *
@@ -34,7 +35,7 @@ class VerifTrain:
         )
 
         print("experiment type: train")
-        print("Dataset: ", config.dataset_name)
+        print("Dataset: %s and Type: %s" % (config.dataset_name, config.train_dataset))
         print("Number of Fingers: ", config.num_join_fingers)
         print("Network Arch:", config.w_name.split("_")[-1])
         print("Savging model in: ", config.w_name)
@@ -82,13 +83,28 @@ class VerifTrain:
             weight_decay = config.weight_decay)
 
         self.scheduler = ExponentialLR(self.optimizer_G, gamma=0.9)
+        #print(self.net_photo.state_dict().keys())
+
+        if config.load_weights_nist and config.is_finetune:
+            print("loading pretrained NIST weights")
+            model_file = os.path.join(config.save_w_dir, "best_model_000.pth")
+            checkpoint = torch.load(model_file)
+
+            ### remove module
+            new_state_dict = OrderedDict()
+            for k, v in checkpoint["net_print"].items():
+                name = k[7:] # remove `module.`
+                new_state_dict[name] = v
+
+            self.net_photo.module.backbone.load_state_dict(new_state_dict)
+            self.net_print.module.backbone.load_state_dict(new_state_dict)
 
         if config.is_load_model:
             print("loading pretrained model from: ", config.save_w_name)
             load_saved_model_for_finetuing(self.net_photo, self.net_print, 
                                     self.disc_photo, self.disc_print, 
                                     is_disc_load=True, partial_finetune=config.partial_finetune) 
-
+        
 
     def validate(self):
         self.net_photo.eval()

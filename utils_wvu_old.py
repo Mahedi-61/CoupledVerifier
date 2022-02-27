@@ -65,23 +65,28 @@ def save_model(net_photo, net_print, fidentity, optimizer_G, disc_photo, disc_pr
         torch.save(checkpoint, config.best_model + str(epoch) + ".pth")
 
 
-def save_model_only_encoder(net_print, net_syn_print, optimizer_AE, epoch, is_best):
+def save_wfusion_model(wfusion, optimizer, epoch):
     checkpoint = {}
 
-    checkpoint["net_print"] = net_print.state_dict()
-    checkpoint["net_syn_print"] = net_syn_print.state_dict()
-    checkpoint["optimizer_G"] = optimizer_AE.state_dict()
+    checkpoint["wfusion"] = wfusion.state_dict()
+    checkpoint["optimizer"] = optimizer.state_dict()
 
-    dir = "F1_D1_A3_final"
-    model_file = os.path.join(config.root_dir, "checkpoints", "wvu_old", dir)
-    best_model = os.path.join(config.root_dir, "checkpoints", "wvu_old", dir)
-    if is_best == False:
-        print("saving model for epoch: ", str(epoch))
-        torch.save(checkpoint, model_file + str(epoch) + ".pth")
+    file_dir = "w_fusion_" + config.w_name
+    model_file = os.path.join(config.dataset_cp_dir, file_dir, "wf_model_" + str(epoch) + ".pth")
+
+    print("saving model for epoch: ", str(epoch))
+    torch.save(checkpoint, model_file)
+
+
+def save_one_model(net_print, optimizer_G, epoch):
+    checkpoint = {}
+    checkpoint["net_print"] = net_print.state_dict()
+    checkpoint["optimizer_G"] = optimizer_G.state_dict()
+
+    print("saving model for epoch: ", str(epoch))
+    torch.save(checkpoint, config.model_file + str(epoch) + ".pth")
     
-    elif is_best == True:
-        print("saving best model so far")
-        torch.save(checkpoint, best_model + ".pth")
+
 
 
 # loading images in a dictionary
@@ -336,8 +341,9 @@ if __name__ == "__main__":
     t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
 
-    ph_d, pr_d = get_multiple_img_dict(config.train_photo_dir, 
-                    config.train_print_dir, [["2", "3", "8", "7"]])
+    ph_d, pr_d = get_multiple_img_dict(config.test_photo_dir, 
+                    config.test_print_dir, config.all_fnums)
     
+    print(config.train_photo_dir)
     print(len(ph_d))
     print(len(pr_d))

@@ -1,19 +1,16 @@
 import numpy as np 
 import torch
 from torch.utils.data import DataLoader 
-from torchvision import transforms 
 import config 
 from model import *
 import os
-import utils_wvu_old
-import dataset_wvu_test
-
-is_ensemble = True   
+import dataset_pretrain
+from utils_wvu_old import * 
 
 class VerifTest:
     def __init__(self):
 
-        self.net_photo, self.net_print = get_model(config.w_name, img_dim=config.img_dim)
+        self.net_print = get_one_model(config.w_name, img_dim=config.img_dim)
 
         if config.is_load_model:
             print("loading all models")
@@ -26,21 +23,17 @@ class VerifTest:
                 model_file = os.path.join(w_dir, model)
                 checkpoint = torch.load(model_file)
 
-                if config.is_convert_one_to_many == True:
-                    compatible_load(checkpoint, self.net_photo, self.net_print, disc_photo = None, 
-                                 disc_print = None, w_name = config.w_name, is_disc_load=True) 
-
-                else:
-                    self.net_photo.load_state_dict(checkpoint["net_photo"])
+                #loads weights trained of one finger to the weights for multi-finger
+                if (config.is_convert_one_to_many == False):
                     self.net_print.load_state_dict(checkpoint["net_print"])
 
-
                 print(model_file)
+                del checkpoint
                 ls_each_finger_per_model_dist = []
-
+            
                 for i in range(config.num_test_aug):
                     self.test_loader = DataLoader(
-                        dataset_wvu_test.WVUFingerDatasetForTest(test_aug_id=i, is_fixed = True),
+                        dataset_pretrain.PretrainFingerDatasetForTest(test_aug_id=i, is_fixed = True),
                         batch_size=config.batch_size, 
                         shuffle=False,
                         pin_memory=True,
@@ -55,47 +48,41 @@ class VerifTest:
                     ls_labels = torch.cat(ls_labels, 0)
 
                     print("augmented result: ", end="")
-                    utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
+                    calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
                 
-                if is_ensemble == True:
-                    #ls_sq_dist, ls_labels = self.test()
-                    #ls_sq_dist = torch.cat(ls_sq_dist, dim=0)
-                    print(ls_sq_dist[:15])
+                if config.is_ensemble == True:
                     ls_each_finger_dist.append(ls_sq_dist)
 
 
-            if is_ensemble == True: 
+            if config.is_ensemble == True: 
                 print(">>>>>>>>>>>>>>> Fusion <<<<<<<<<<<<<<<")
-                #ls_each_finger_dist = min_max_normalization(ls_each_finger_dist)
+                ls_each_finger_dist = min_max_normalization(ls_each_finger_dist)
                 ls_sq_dist = simple_average(ls_each_finger_dist)
 
                 if config.is_test_augment == False: ls_labels = torch.cat(ls_labels, 0)
-                utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
-
+                calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
 
     def test(self):
-        self.net_photo.eval()
         self.net_print.eval()
 
         ls_sq_dist = []
         ls_labels = []
 
         with torch.no_grad():
-            for img_photo, img_print, label in self.test_loader:
+            for img_print1, img_print2, label in self.test_loader:
                 label = label.type(torch.float)
-
-                img_photo = img_photo.to(config.device)
-                img_print = img_print.to(config.device)
+                img_print1 = img_print1.to(config.device)
+                img_print2 = img_print2.to(config.device)
                 label = label.to(config.device)
 
-                _, embd_photo = self.net_photo(img_photo)
-                _, embd_print = self.net_print(img_print)
+                img1, embd_print1 = self.net_print(img_print1)
+                img2, embd_print2 = self.net_print(img_print2)
 
-                dist_sq = torch.sum(torch.pow(embd_photo - embd_print, 2), dim=1) #torch.sqrt()
+                dist_sq = torch.sum(torch.pow(embd_print1 - embd_print2, 2), dim=1) #torch.sqrt()
                 ls_sq_dist.append(dist_sq.data)
                 ls_labels.append((1 - label).data)
             
-        utils_wvu_old.calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
+        calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
         return ls_sq_dist, ls_labels
 
 
@@ -116,9 +103,3 @@ def simple_average(ls_each_finger_dist):
 
 if __name__ == "__main__":
     v = VerifTest()
-    """
-    for i in range(101):
-        phi, pi = vt.__getitem__(i)
-        print(phi[0].split("/")[-3:-1], phi[1].split("/")[-3:-1])
-        print("\n", pi[0].split("/")[-3:-1], pi[1].split("/")[-3:-1])
-    """

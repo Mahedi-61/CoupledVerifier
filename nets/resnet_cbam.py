@@ -39,6 +39,7 @@ class SpatialAttention(nn.Module):
         x = self.conv1(x)
         return self.sigmoid(x)
 
+
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -77,11 +78,11 @@ class BasicBlock(nn.Module):
 
         return out
 
-class ResNet(nn.Module):
 
+class ResentCBAM(nn.Module):
     def __init__(self, block=BasicBlock, layers=[2, 2, 2, 2], img_dim=1):
         self.inplanes = 64
-        super(ResNet, self).__init__()
+        super(ResentCBAM, self).__init__()
         self.conv1 = nn.Conv2d(img_dim, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -138,14 +139,27 @@ class ResNet(nn.Module):
         return x
 
 
-class ResentCBAM(nn.Module):
+class get_model(nn.Module):
     def __init__(self, img_dim=1, out_dim=256):
         super().__init__()
-        self.cnn_block =  nn.Sequential(*list(ResNet(img_dim=img_dim).children()))
+        self.cnn_block =  nn.Sequential(*list(ResentCBAM(img_dim=img_dim).children()))
         self.fc = nn.Sequential(
             nn.Linear(512, out_dim)
         )
 
+    def forward(self, x):
+        x = self.cnn_block(x)
+        x = x.view(x.size(0), -1)
+        embd = self.fc(x)
+        return embd 
+
+
+if __name__ == "__main__":
+    net = get_model()
+    summary(net, (1, 256, 256), device="cpu")
+
+
+"""
         # now decoder
         decoder = [] 
         in_channels = 512 # for resnet 18 
@@ -170,15 +184,4 @@ class ResentCBAM(nn.Module):
                     nn.Tanh()]
     
         self.decoder = nn.Sequential(*decoder)
-
-    def forward(self, x):
-        x = self.cnn_block(x)
-        img = self.decoder(x)
-        x = x.view(x.size(0), -1)
-        embd = self.fc(x)
-        return img, embd 
-
-
-if __name__ == "__main__":
-    net = ResentCBAM()
-    summary(net, (1, 256, 256), device="cpu")
+"""

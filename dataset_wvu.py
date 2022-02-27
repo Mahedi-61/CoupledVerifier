@@ -6,6 +6,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms 
 import config
 import torchvision.transforms.functional as TF
+from  torch.optim.lr_scheduler import ExponentialLR
+
 
 # load dataset: wvu_new, wvu_old
 if config.dataset_name == "wvu_old":
@@ -21,7 +23,6 @@ class WVUFingerDataset(Dataset):
         self.train = train 
 
         if (self.train == True): 
-            print("trainning data loading")
             if config.num_join_fingers == 1 and config.is_one_fid == False:
                 self.dict_photo, self.dict_print = get_img_dict(
                     config.train_photo_dir, config.train_print_dir)
@@ -54,7 +55,6 @@ class WVUFingerDataset(Dataset):
             fill_photo = (0, )
 
         if train == True:
-
             # Resize
             if random.random() > 0.5:
                 resize = transforms.Resize(size=(286, 286))
@@ -78,7 +78,7 @@ class WVUFingerDataset(Dataset):
                 print = TF.hflip(print)
 
             # Random rotation
-            angle = transforms.RandomRotation.get_params(degrees=(0, 10))
+            angle = transforms.RandomRotation.get_params(degrees=(-10, 10))
             photo = TF.rotate(photo, angle, fill=fill_photo)
             print = TF.rotate(print, angle, fill=fill_print)
 

@@ -2,32 +2,33 @@ import os
 import torch 
 
 #conditions
-dataset_name = "wvu_old" #wvu_new, wvu_old
+dataset_name = "pretrain" #wvu_new, wvu_old
 photo_type = ""
 if dataset_name == "wvu_new": photo_type = "v" #vfp
 
-is_train = False                                                                                                                                                                         
-is_load_model = True                                                                           
-is_one_fid = True #train and test only on finger ID 
-partial_finetune = False    # only finetuning the last layer of the pretrained model
-is_finetune = False           
-is_convert_one_to_many = False                                                                                  
-num_join_fingers = 4
+is_train = True                                                                                                                                                                                                                             
+is_load_model = False                                                                                    
+is_one_fid = False        #train and test only on finger ID 
+partial_finetune = False  # only finetuning the last layer of the pretrained model
+is_finetune = False             
+is_convert_one_to_many = False                                                                                    
+num_join_fingers = 1
 
-fnums = [["7"]]                                                                    
-w_name = "F1_D1_ID7_A1"  #weight save --> train | weights load --> test
-
+fnums =  [[""]]                                                                    
+w_name = "F1_D3_A1"  #weight save --> train | weights load --> test
 
  #weights for initialization
-save_w_name = "F1_D1_A1"
+save_w_name = ""
 conversion_type = ""
 
 # for testing 
-is_all_pairs = False                 
+is_all_pairs = False                   
 combined_w_name = "" #require for score fusion   
 num_test_aug = 2
 is_test_augment = True
+is_ensemble = False         
 
+load_weights_nist = False 
 multi_gpus = True  
 img_dim = num_join_fingers
 is_save_model = is_train 
@@ -37,17 +38,17 @@ if is_test_augment == False: num_test_aug = 1
 # training parameters
 is_display = True 
 num_imposter = 2
-num_pair_test = 20
-batch_size = 230
-learning_rate = 0.0001
+num_pair_test = 30
+batch_size = 384    
+learning_rate = 0.0002
 weight_decay = 5e-4
-num_epochs = 120
-start_saving_epoch = 1
+num_epochs = 500 
+start_saving_epoch = 300
 
 if is_all_pairs:
     if dataset_name == "wvu_old":
         if num_join_fingers == 2:
-            all_fnums = [["2", "3"], ["3", "4"], ["7", "8"], ["8", "9"]]
+            all_fnums = [["2", "3"], ["3", "4"], ["7", "8"], ["8", "9"], ["2", "7"]]
 
         elif num_join_fingers == 3:
             all_fnums =  [["2", "3", "4"], ["2", "3", "7"], 
@@ -83,12 +84,16 @@ datasets_dir = os.path.join(root_dir, "..", "datasets")
 
 
 if dataset_name == "wvu_old":
-    train_dataset = "amar_clean_r60_as_train" #"wvu_combine"   
+    train_dataset = "amar_clean_all_as_train" 
     test_dataset =  "amar_clean_r60_as_test" #clean
 
 elif dataset_name == "wvu_new":
     train_dataset = "wvu_new_train"
     test_dataset =  "wvu_new_test"
+
+elif dataset_name == "pretrain":
+    train_dataset = "pretrain_final"
+    test_dataset = "clean_13_as_test"
 
 
 train_photo_dir = os.path.join(datasets_dir, train_dataset, "photo")
@@ -103,6 +108,7 @@ saved_data_dir = os.path.join(dataset_cp_dir, "data")
 
 old_weights_dir = os.path.join(root_dir, "checkpoints", "wvu_old")
 new_weights_dir = os.path.join(root_dir, "checkpoints", "wvu_new", photo_type)
+pretrain_weights_dir = os.path.join(root_dir, "checkpoints", "pretrain")
 
 
 # weights, model, best model
@@ -114,16 +120,26 @@ elif dataset_name == "wvu_new":
     w_dir = os.path.join(new_weights_dir, w_name)
     combined_w_dir = os.path.join(new_weights_dir, combined_w_name)
 
+elif dataset_name == "pretrain":
+    w_dir = os.path.join(pretrain_weights_dir, w_name)
+
+
 if w_name.split("_")[-1] == "A1":
     model_file = os.path.join(w_dir, "model_res18_m%d_" %margin)
 
 if w_name.split("_")[-1] == "A2":
     model_file = os.path.join(w_dir, "model_atten_m%d_" %margin)
 
+if w_name.split("_")[-1] == "A5":
+    model_file = os.path.join(w_dir, "model_dense_m%d_" %margin)
+
 best_model = os.path.join(w_dir, "best_model_" )
 
 
 if is_finetune == True:
+    if conversion_type == "PvsO":
+         save_w_dir = os.path.join(pretrain_weights_dir, save_w_name)
+
     if conversion_type == "OvsVFP" or conversion_type == "OvsV":
         save_w_dir = os.path.join(old_weights_dir, save_w_name)
 
