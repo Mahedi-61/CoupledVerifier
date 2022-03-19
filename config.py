@@ -2,48 +2,51 @@ import os
 import torch 
 
 #conditions
-dataset_name = "wvu_old" #wvu_new, wvu_old
+dataset_name = "pretrain" #wvu_new, wvu_old
 photo_type = ""
 if dataset_name == "wvu_new": photo_type = "v" #vfp
 
-is_train = True                                                                                                                                                                                                                             
-is_load_model = False                                                                                     
-is_one_fid = False        #train and test only on finger ID 
+is_train = True                                                                                                                                                                                                                                                       
+is_load_model = False                                                                                             
+is_one_fid = False              # train and test only on the finger ID 
 partial_finetune = False  # only finetuning the last layer of the pretrained model
-is_finetune = True             
+is_finetune = True                           
 is_convert_one_to_many = False                                                                                    
 num_join_fingers = 1
 
 fnums =  [[""]]                                                                    
-w_name = "F1_D1_A1"  #weight save --> train | weights load --> test
+w_name = "bin_F1_D3_A1"  #weight save --> train | weights load --> test
 
  #weights for initialization
-save_w_name = "F1_D3_A1"
-conversion_type = "PvsO"
+save_w_name = ""
+conversion_type = ""
+pretrain_type = "bin" #gr, g
+
 
 # for testing 
 is_all_pairs = False                   
 combined_w_name = "" #require for score fusion   
 num_test_aug = 2
 is_test_augment = True
-is_ensemble = False         
+is_ensemble = True                  
 
-load_pretrain_weights = True  
+load_pretrain_weights = False     
 multi_gpus = True  
 img_dim = num_join_fingers
 is_save_model = is_train 
 if is_train == True: is_test_augment = False       
 if is_test_augment == False: num_test_aug = 1
 
+
 # training parameters
 is_display = True 
 num_imposter = 2
-num_pair_test = 50
-batch_size = 384    
-learning_rate = 0.00015
+num_pair_test = 70
+batch_size = 544        
+learning_rate = 0.002
 weight_decay = 5e-4
-num_epochs = 400 
-start_saving_epoch = 80
+num_epochs = 550
+start_saving_epoch = 400  
 
 if is_all_pairs:
     if dataset_name == "wvu_old":
@@ -89,11 +92,13 @@ if dataset_name == "wvu_old":
 
 elif dataset_name == "wvu_new":
     train_dataset = "wvu_new_train"
-    test_dataset =  "wvu_new_test"
+    test_dataset =  "wvu_new_combine"
 
 elif dataset_name == "pretrain":
-    train_dataset = "pretrain_final"
-    test_dataset = "amar_clean_r60_as_test"
+    if pretrain_type == "bin": train_dataset = "bin_pretrain" 
+    elif pretrain_type == "gr": train_dataset = "gr_pretrain"  
+    elif pretrain_type == "g": train_dataset = "g_pretrain" 
+    test_dataset = "wvu_new_combine"
 
 
 train_photo_dir = os.path.join(datasets_dir, train_dataset, "photo")

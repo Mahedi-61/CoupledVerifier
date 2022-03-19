@@ -4,45 +4,41 @@ from torch.utils.data import DataLoader
 import config 
 from model import *
 import os
-import dataset_pretrain
 import dataset_wvu_test
 from utils_wvu_new import * 
+
 
 class VerifTest:
     def __init__(self):
 
-        self.net_print = get_one_model(config.w_name, img_dim=config.img_dim)
+        self.net_print = get_one_model_full(config.w_name, img_dim=config.img_dim)
 
         if config.is_load_model:
             print("loading all models")
-            
             if config.is_finetune: w_dir = config.save_w_dir
-            else: w_dir = config.w_dir
-
+            else: w_dir = config.w_dir            
             all_models = sorted(os.listdir(w_dir), 
-                        key= lambda x: int((x.split("_")[-1]).split(".")[0]))  
+                                key= lambda x: int((x.split("_")[-1]).split(".")[0]))  
 
             ls_each_finger_dist = []
             for model in all_models:
                 model_file = os.path.join(w_dir, model)
                 checkpoint = torch.load(model_file)
 
-                #loads weights trained of one finger to the weights for multi-finger
-                if (config.is_convert_one_to_many == False):
-                    self.net_print.load_state_dict(checkpoint["net_print"])
+                self.net_print.load_state_dict(checkpoint["net_print"])
+
 
                 print(model_file)
                 del checkpoint
                 ls_each_finger_per_model_dist = []
-            
+
                 for i in range(config.num_test_aug):
                     self.test_loader = DataLoader(
-                        #dataset_pretrain.PretrainFingerDatasetForTest(test_aug_id=i, is_fixed = True),
                         dataset_wvu_test.WVUFingerDatasetForTest(test_aug_id=i, is_fixed = True),
                         batch_size=config.batch_size, 
                         shuffle=False,
                         pin_memory=True,
-                        num_workers= 1)
+                        num_workers= 6)
 
                     ls_sq_dist, ls_labels = self.test()
                     ls_sq_dist = torch.cat(ls_sq_dist, dim=0)
@@ -67,22 +63,25 @@ class VerifTest:
                 if config.is_test_augment == False: ls_labels = torch.cat(ls_labels, 0)
                 calculate_scores(ls_labels, ls_sq_dist, is_ensemble=True)
 
+
     def test(self):
         self.net_print.eval()
+
         ls_sq_dist = []
         ls_labels = []
 
         with torch.no_grad():
-            for img_print1, img_print2, label in self.test_loader:
+            for img_photo, img_print, label in self.test_loader:
                 label = label.type(torch.float)
-                img_print1 = img_print1.to(config.device)
-                img_print2 = img_print2.to(config.device)
+
+                img_photo = img_photo.to(config.device)
+                img_print = img_print.to(config.device)
                 label = label.to(config.device)
 
-                img1, embd_print1 = self.net_print(img_print1)
-                img2, embd_print2 = self.net_print(img_print2)
+                _, embd_photo = self.net_print(img_photo)
+                _, embd_print = self.net_print(img_print)
 
-                dist_sq = torch.sum(torch.pow(embd_print1 - embd_print2, 2), dim=1) #torch.sqrt()
+                dist_sq = torch.sum(torch.pow(embd_photo - embd_print, 2), dim=1) #torch.sqrt()
                 ls_sq_dist.append(dist_sq.data)
                 ls_labels.append((1 - label).data)
             
@@ -107,3 +106,9 @@ def simple_average(ls_each_finger_dist):
 
 if __name__ == "__main__":
     v = VerifTest()
+    """
+    for i in range(101):
+        phi, pi = vt.__getitem__(i)
+        print(phi[0].split("/")[-3:-1], phi[1].split("/")[-3:-1])
+        print("\n", pi[0].split("/")[-3:-1], pi[1].split("/")[-3:-1])
+    """

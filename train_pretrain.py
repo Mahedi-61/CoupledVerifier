@@ -19,8 +19,10 @@ class VerifTrain:
             num_workers= 6  
             )
 
-        print("experiment type: train")
+        print("experiment type: pretrain")
         print("Dataset: %s and Type: %s" % (config.dataset_name, config.train_dataset))
+        print("Pretrian type: ", config.pretrain_type)
+        print("Data: ", config.train_print_dir)
         print("Number of Fingers: ", config.num_join_fingers)
         print("Network Arch:", config.w_name.split("_")[-1])
         print("Savging model in: ", config.w_name)
@@ -41,33 +43,6 @@ class VerifTrain:
             print("loading pretrained model from: ", config.save_w_name)
             load_single_model_for_finetuing(self.net_print)
 
-    
-    """
-    def validate(self):
-        self.net_print.eval()
-
-        ls_sq_dist = []
-        ls_labels = []
-        
-        with torch.no_grad(): 
-            for img_photo, img_print, label in self.val_loader:
-                label = label.type(torch.float)
-
-                img_photo = img_photo.to(config.device)
-                img_print = img_print.to(config.device)
-                label = label.to(config.device)
-
-                _, embd_photo = self.net_photo(img_photo)
-                _, embd_print = self.net_print(img_print)
-
-                dist_sq = torch.sum(torch.pow(embd_photo - embd_print, 2), dim=1) #torch.sqrt()
-                ls_sq_dist.append(dist_sq.data)
-                ls_labels.append((1 - label).data)
-
-        auc, eer =  calculate_scores(ls_labels, ls_sq_dist, is_ensemble=False)
-        self.net_print.train() 
-        return auc, eer
-    """
 
     def contrastive_loss(self, embd_photo, embd_print, label):
         # euclidean distance
@@ -87,11 +62,9 @@ class VerifTrain:
         return dist_sq, con_loss
 
 
-
     def backward_G(self, img_print1, img_print2, label):
         img1, embd_print1 = self.net_print(img_print1)
         img2, embd_print2 = self.net_print(img_print2)
-
 
         # contrastive loss 
         dist_sq, con_loss = self.contrastive_loss(embd_print1, embd_print2, label)
@@ -147,4 +120,3 @@ class VerifTrain:
 if __name__ == "__main__":
     t = VerifTrain()
     t.train()
-

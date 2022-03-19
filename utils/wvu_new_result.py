@@ -1,7 +1,13 @@
 import numpy as np
 import sklearn.metrics
+import os 
+import sys 
 
-result_dir = "./v/res_wvu_new_v_test.csv"
+root_dir = "/media/lab320/SSDDrive/reproduce/src_verifier/result_innovatrics/wvu_new"
+type_dir = "gr"
+result = sys.argv[1]
+result_dir = os.path.join(root_dir, type_dir, result)
+
 with open(result_dir) as f:
     result = f.read()
     f.close()

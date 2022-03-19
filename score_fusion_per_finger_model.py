@@ -1,15 +1,14 @@
 import numpy as np 
 import torch
-from torch.utils.data import Dataset, DataLoader 
-from torchvision import transforms 
+from torch.utils.data import DataLoader 
 import config 
 from model import *
 import random 
 import os
-from PIL import Image 
 from collections import OrderedDict
 import random 
 import torchvision.transforms.functional as TF
+import dataset_wvu_test
 
 if config.dataset_name == "wvu_old":
     from utils_wvu_old import *
@@ -19,171 +18,18 @@ elif config.dataset_name == "wvu_new":
     from utils_wvu_new import *
     w_dir = config.new_weights_dir
 
-f1_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][0]
-f2_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][1]
+f1_dir = "F1_D1_ID%s_A1" % config.fnums[0][0]
+f2_dir = "F1_D1_ID%s_A1" % config.fnums[0][1]
 
 if config.num_join_fingers >= 3:
-    f3_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][2]
+    f3_dir = "F1_D1_ID%s_A1" % config.fnums[0][2]
 
     if config.num_join_fingers == 4:
-         f4_dir = "F1_D2v_ID%s_ft_A1" % config.fnums[0][3]
+         f4_dir = "F1_D1_ID%s_A1" % config.fnums[0][3]
 
 
-is_combine = True        
+is_combine = False         
 is_final_ensemble = True                                
-
-## Special Class for Fixed Test set and results
-class WVUVerifierForTest(Dataset):
-    def __init__(self, test_aug_id, is_fixed = True):
-        super().__init__()
-
-        if config.num_join_fingers >= 2:
-            self.dict_photo, self.dict_print = get_multiple_img_dict(
-                    config.test_photo_dir, config.test_print_dir, config.fnums)
-
-        self.is_fixed = is_fixed 
-        self.test_aug_id = test_aug_id
-
-        if config.is_display:
-            print("Dataset: ", config.dataset_name)
-            print("experiment type: test")
-            print("Number of Fingers IDs: ", len(self.dict_photo))
-            print("Number of Fingers:", config.num_join_fingers)
-            print("Network Arch:", config.w_name.split("_")[-1])
-            if is_combine: print("loading models from: ", config.combined_w_name)
-            print("Number of imposter pair: ", config.num_pair_test)
-            config.is_display = False 
-
-        self.dict_print = OrderedDict(sorted(self.dict_print.items()))
-        self.new_imposter_pos = 0
-
-
-    def test_trans(self, photo, print):
-        """
-         0: only (256, 256) resized images
-         1: (256, 256) h-flip resized images
-         2: (286, 286) resized (256, 256) center crop images
-        """
-
-        # Resize
-        if self.test_aug_id <= 1:
-            resize = transforms.Resize(size=(config.img_size, config.img_size))
-            photo = resize(photo)
-            print = resize(print)
-        
-        else:
-            resize = transforms.Resize(size=(286, 286))
-            photo = resize(photo)
-            print = resize(print)
-
-        # Random horizontal flipping
-        if self.test_aug_id == 1 or self.test_aug_id == 3:
-            photo = TF.hflip(photo)
-            print = TF.hflip(print)
-
-        if self.test_aug_id >= 2: 
-            # center crop
-            if self.test_aug_id == 2: i, j = (15, 15)
-            if self.test_aug_id == 3: i, j = (15, 15)
-            h=config.img_size
-            w=config.img_size
-            photo = TF.crop(photo, i, j, h, w)
-            print = TF.crop(print, i, j, h, w)
-
-        # Transform to tensor
-        photo = TF.to_tensor(photo)
-        print = TF.to_tensor(print)
-
-        # normalize
-        normalize = transforms.Normalize(mean = [0.5], std = [0.5])
-        photo = normalize(photo)
-        print = normalize(print)
-
-        return photo, print
-
-
-    def __len__(self):
-        return  len(self.dict_photo) * config.num_pair_test 
-
-    def __getitem__(self, index):
-        num = index % config.num_pair_test 
-        id_position = (index // config.num_pair_test) 
-
-        # genuine pair 
-        if (num == 0):
-            finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
-            class_id = finger_id
-            same_class = True
-            #print("Photo: " + str(id_position) + "| Print: " + str(id_position) + " genuine")
-            self.new_imposter_pos = 0
-
-        # imposter pair
-        elif (num > 0):
-            finger_id, photo_image = self.dict_photo[index // config.num_pair_test]
-            same_class = False 
-
-            # fixed test set
-            if self.is_fixed:
-                if (id_position + num <  len(self.dict_photo)):
-                    class_id = list(self.dict_print.keys())[id_position + num]
-                    #print("Photo: " + str(id_position) + "| Print: " + str(id_position + num))
-
-                else:
-                    class_id = list(self.dict_print.keys())[self.new_imposter_pos]
-                    #print("Photo: " + str(id_position) + "| Print: " + str(self.new_imposter_pos))
-                    self.new_imposter_pos += 1
-
-            # random test set
-            else:
-                class_id = list(self.dict_print.keys())[random.randint(0, 
-                                            len(self.dict_print) - 1)]
-
-                while finger_id == class_id:
-                    class_id = list(self.dict_print.keys())[random.randint(0, 
-                                            len(self.dict_print) - 1)] 
-
-        
-        print_image = self.dict_print[class_id]
-
-        # for 2 fingers
-        ph_f1 = Image.open(photo_image[0]).convert("L") 
-        ph_f2 = Image.open(photo_image[1]).convert("L")
-        pr_f1 = Image.open(print_image[0]).convert("L") 
-        pr_f2 = Image.open(print_image[1]).convert("L")
-
-        ph_f1, pr_f1 = self.test_trans(ph_f1, pr_f1)
-        ph_f2, pr_f2 = self.test_trans(ph_f2, pr_f2)
-
-        img1 = torch.cat([ph_f1, ph_f2], dim=0)
-        img2 = torch.cat([pr_f1, pr_f2], dim=0)
-
-        ls_photo_fs = [ph_f1, ph_f2]
-        ls_print_fs = [pr_f1, pr_f2]
-
-        # for 3 fingers (only adding additional finger's data)
-        if config.num_join_fingers >= 3:
-            ph_f3 = Image.open(photo_image[2]).convert("L")
-            pr_f3 = Image.open(print_image[2]).convert("L")
-            ph_f3, pr_f3 = self.test_trans(ph_f3, pr_f3)
-
-            ls_photo_fs.append(ph_f3)
-            ls_print_fs.append(pr_f3)
-
-            img1 = torch.cat([ph_f1, ph_f2, ph_f3], dim=0)
-            img2 = torch.cat([pr_f1, pr_f2, pr_f3], dim=0)
-
-            if config.num_join_fingers == 4:
-                ph_f4 = Image.open(photo_image[3]).convert("L")
-                pr_f4 = Image.open(print_image[3]).convert("L")
-                ph_f4, pr_f4 = self.test_trans(ph_f4, pr_f4)
-
-                ls_photo_fs.append(ph_f4)
-                ls_print_fs.append(pr_f4)
-
-                img1 = torch.cat([ph_f1, ph_f2, ph_f3, ph_f4], dim=0)
-                img2 = torch.cat([pr_f1, pr_f2, pr_f3, pr_f4], dim=0)
-
-        return  ls_photo_fs, ls_print_fs, img1, img2, same_class
 
 
 class VerifTest:
@@ -250,7 +96,7 @@ class VerifTest:
                 ls_each_test_aug_dist = []
                 for j in range(config.num_test_aug):
                     self.test_loader = DataLoader(
-                        WVUVerifierForTest(test_aug_id=j, is_fixed = True),
+                        dataset_wvu_test.WVUFingerDatasetForTest(test_aug_id=j, is_fixed=True),
                         batch_size=config.batch_size, 
                         shuffle=False,
                         pin_memory=True,
@@ -334,7 +180,7 @@ class VerifTest:
         ls_labels = []
 
         with torch.no_grad():
-            for ls_photo_fs, ls_print_fs, img_photo, img_print, label in self.test_loader:
+            for img_photo, img_print, label in self.test_loader:
                 label = label.type(torch.float)
 
                 # for multiple fingers
@@ -342,6 +188,9 @@ class VerifTest:
                 img_photo = img_photo.to(config.device)
                 img_print = img_print.to(config.device)
                 label = label.to(config.device)
+
+                ls_photo_fs = torch.split(img_photo, 1, dim=1)
+                ls_print_fs = torch.split(img_print, 1, dim=1)
 
                 if is_combine:
                     _, embd_photo = self.net_photo_combine(img_photo)

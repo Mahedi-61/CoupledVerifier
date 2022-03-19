@@ -1,10 +1,10 @@
 from matplotlib import pyplot as plt 
-from torchvision.utils import save_image 
 import torch 
 import config 
 import os 
 from sklearn import metrics
 import numpy as np 
+from collections import OrderedDict
 
 class AverageMeter():
     def __init__(self):
@@ -62,6 +62,14 @@ def save_model(net_photo, net_print, fidentity, optimizer_G, disc_photo, disc_pr
         torch.save(checkpoint, config.best_model + str(epoch) + ".pth")
 
 
+def save_one_model(net_print, optimizer_G, epoch):
+    checkpoint = {}
+    checkpoint["net_print"] = net_print.state_dict()
+    checkpoint["optimizer_G"] = optimizer_G.state_dict()
+
+    print("saving model for epoch: ", str(epoch))
+    torch.save(checkpoint, config.model_file + str(epoch) + ".pth")
+ 
 
 # loading images in a dictionary
 def get_img_dict(photo_path, print_path):
@@ -94,54 +102,58 @@ def get_multiple_img_dict(photo_path, print_path, ls_fnums):
     print_finger_dict = {}
 
     index = 0
-    for sub_id in os.listdir(photo_path):
+    all_subs = sorted(os.listdir(photo_path))
+    ext = ".png"
+
+    for sub_id in all_subs:
         for fnums in ls_fnums:
             sub_dir = os.path.join(photo_path, sub_id) 
+            dict_key = sub_id + "_" + str(index)
 
-            first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
+            first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ext)
             if config.num_join_fingers == 1:
-                photo_finger_dict[index] = [sub_id + "_" + str(index), first_f_dir]
+                photo_finger_dict[index] = [dict_key, first_f_dir]
 
             else:
-                second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
+                second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ext)
                 if config.num_join_fingers == 2:
-                    photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, second_f_dir]] 
+                    photo_finger_dict[index] = [dict_key, [first_f_dir, second_f_dir]] 
 
                 else:
-                    third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
+                    third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ext)
                     if config.num_join_fingers == 3:
-                        photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, second_f_dir, third_f_dir]]
+                        photo_finger_dict[index] = [dict_key, [first_f_dir, second_f_dir, third_f_dir]]
 
                     else:
-                        fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
+                        fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ext)
                         if config.num_join_fingers == 4:
-                            photo_finger_dict[index] = [sub_id + "_" + str(index), [first_f_dir, 
-                                                            second_f_dir, third_f_dir, fourth_f_dir]]
+                            photo_finger_dict[index] = [dict_key, [first_f_dir, 
+                                                        second_f_dir, third_f_dir, fourth_f_dir]]
 
             # for finger print
             sub_dir = os.path.join(print_path, sub_id)
-            if(os.path.isdir(sub_dir)):
 
+            if(os.path.isdir(sub_dir)):
                 first_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[0] + ".png")
                 if config.num_join_fingers == 1:
-                    print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir] 
+                    print_finger_dict[dict_key] = [first_f_dir] 
 
                 elif config.num_join_fingers >= 2:
                     second_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[1] + ".png")
 
                     if config.num_join_fingers == 2:
-                        print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir] 
+                        print_finger_dict[dict_key] = [first_f_dir, second_f_dir] 
 
                     elif config.num_join_fingers >= 3:
                         third_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[2] + ".png")
 
                         if config.num_join_fingers == 3:
-                            print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir, third_f_dir] 
+                            print_finger_dict[dict_key] = [first_f_dir, second_f_dir, third_f_dir] 
 
                         elif config.num_join_fingers == 4:
                             fourth_f_dir = os.path.join(sub_dir, sub_id + "_" + fnums[3] + ".png")
-                            print_finger_dict[sub_id + "_" + str(index)] = [first_f_dir, second_f_dir, 
-                                                                        third_f_dir, fourth_f_dir] 
+                            print_finger_dict[dict_key] = [first_f_dir, second_f_dir, 
+                                                                    third_f_dir, fourth_f_dir] 
 
             index += 1
 
@@ -163,23 +175,21 @@ def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
     elif is_ensemble == True:
         pred_ls = ls_sq_dist
         true_label = ls_labels
-        
+
     pred_ls = pred_ls.cpu().detach().numpy()
     true_label = true_label.cpu().detach().numpy() 
-    
+
     # sklearn always takes (y_true, y_pred)
     fprs, tprs, threshold = metrics.roc_curve(true_label, pred_ls)
     eer = fprs[np.nanargmin(np.absolute((1 - tprs) - fprs))]
     auc = metrics.auc(fprs, tprs)
+
     print("AUC {:.4f} | EER {:.4f}".format(auc, eer))
-    #np.save("%s/lbl_test.npy" %(config.saved_data_dir), true_label)
-    #np.save("%s/dist_test.npy" %(config.saved_data_dir), pred_ls)
-    
     return auc, eer 
 
 
 if __name__ == "__main__":
     #t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
-    ph_dict, pr_dict =  get_multiple_img_dict(config.test_photo_dir, 
-                            config.test_print_dir, [["8"]]) 
+    ph_dict, pr_dict =  get_multiple_img_dict(config.train_photo_dir, 
+                            config.train_print_dir, [["7", "8"]]) 

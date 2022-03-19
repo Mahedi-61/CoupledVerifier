@@ -88,7 +88,6 @@ def save_one_model(net_print, optimizer_G, epoch):
     
 
 
-
 # loading images in a dictionary
 def get_img_dict(photo_path, print_path):
     photo_finger_dict = {}
@@ -226,8 +225,7 @@ def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
 
     print("AUC {:.4f} | EER {:.4f}".format(auc, eer))
     return auc, eer 
-    #np.save("%s/lbl_test.npy" %(config.saved_data_dir), true_label)
-    #np.save("%s/dist_test.npy" %(config.saved_data_dir), pred_ls)
+
 
 
 

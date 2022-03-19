@@ -8,7 +8,6 @@ import torchvision.transforms.functional as TF
 import os 
 import utils_wvu_old
 
-
 class PretrainFingerDataset(Dataset):
     def __init__(self, train = True):
         super().__init__()
@@ -18,14 +17,7 @@ class PretrainFingerDataset(Dataset):
             if config.num_join_fingers == 1:
                 self.dict_print = get_img_dict(config.train_print_dir)
             
-
-        elif(self.train == False):
-            print("\nvalidation data loading ...")
-            if config.num_join_fingers == 1:
-                self.dict_print = get_img_dict(config.test_print_dir)
-            
         self.num_print_samples = len(self.dict_print)
-
 
     def trans(self, print_img1, print_img2, train=True):
         fill_print = (255,)
@@ -52,7 +44,6 @@ class PretrainFingerDataset(Dataset):
             if random.random() > 0.5:
                 print_img1 = TF.hflip(print_img1)
                 print_img2 = TF.hflip(print_img2)
-
 
             # Random rotation
             angle = transforms.RandomRotation.get_params(degrees=(-10, 10))
@@ -112,11 +103,6 @@ class PretrainFingerDataset(Dataset):
             if len(ls_img2) == 1: pos_img2 = 0
             else: 
                 pos_img2 = random.randint(0, len(ls_img2) - 1)
-                """
-                if same_class == True:
-                    while pos_img1 == pos_img2:
-                        pos_img2 = random.randint(0, len(ls_img2) - 1)
-                """
 
             img2_path = os.path.join(print_img2_dir, ls_img2[pos_img2])
             print_img2 = Image.open(img2_path).convert("L")
@@ -124,7 +110,6 @@ class PretrainFingerDataset(Dataset):
             img1, img2 = self.trans(print_img1, print_img2, self.train)     
 
         return img1, img2, same_class
-
 
     def find_mean_std(self):
         #ph_mean = [0.70751] ph_std = [0.22236] 
@@ -149,7 +134,7 @@ class PretrainFingerDatasetForTest(Dataset):
         super().__init__()
 
         if config.num_join_fingers == 1:
-            self.dict_print = get_img_dict(config.test_print_dir)
+            self.dict_print = get_img_dict(config.test_photo_dir)
             
         self.is_fixed = is_fixed 
 
@@ -267,6 +252,6 @@ def get_img_dict(print_path):
 if __name__ == "__main__":
     vt = PretrainFingerDataset()
 
-    for i in range(200):
+    for i in range(6000, 6005):
         img1, img2, same_class = vt.__getitem__(i)
         utils_wvu_old.plot_tensors([img1, img2], title=same_class)

@@ -1,7 +1,7 @@
 from operator import truediv
 import numpy as np 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms 
 import config 
 from PIL import Image 
@@ -34,8 +34,9 @@ class WVUFingerDatasetForTest(Dataset):
 
         if config.is_display == True:
             print("Dataset: ", config.dataset_name)
-            print("experiment type: test")
+            print("experiment type: test | test dataset: ", config.test_dataset)
             print("Number of Fingers IDs: ", len(self.dict_photo))
+            print("Fingers: ", config.fnums)
             print("Number of Fingers:", config.num_join_fingers)
             print("Network Arch:", config.w_name.split("_")[-1])
             print("loading models from: ", config.w_name)
@@ -45,7 +46,6 @@ class WVUFingerDatasetForTest(Dataset):
         self.dict_print = OrderedDict(sorted(self.dict_print.items()))        
         self.new_imposter_pos = 0
         self.test_aug_id = test_aug_id
-
 
     def test_trans(self, photo, print):
         """
@@ -129,9 +129,10 @@ class WVUFingerDatasetForTest(Dataset):
 
             # fixed test set
             if self.is_fixed:
-                if (id_position + num <  len(self.dict_photo)):
+                if (id_position + num) <  len(self.dict_print):
                     class_id = list(self.dict_print.keys())[id_position + num]
                     #print("Photo: " + str(id_position) + "| Print: " + str(id_position + num))
+                    self.new_imposter_pos = 0
 
                 else:
                     class_id = list(self.dict_print.keys())[self.new_imposter_pos]
@@ -149,6 +150,7 @@ class WVUFingerDatasetForTest(Dataset):
 
         if config.num_join_fingers == 1:
             ph_f = Image.open(photo_image).convert("L")
+
             pr_f = Image.open((self.dict_print[class_id])[0]).convert("L")
             img1, img2 = self.test_trans(ph_f, pr_f)
 
@@ -190,4 +192,12 @@ class WVUFingerDatasetForTest(Dataset):
 
 
 if __name__ == "__main__":
-    db = WVUFingerDatasetForTest(is_fixed=True)
+    test_loader = DataLoader(
+        WVUFingerDatasetForTest(test_aug_id=0, is_fixed = True),
+        batch_size=config.batch_size, 
+        shuffle=False,
+        pin_memory=True,
+        num_workers= 1)
+
+    for img1, img2, c in test_loader:
+        pass   
