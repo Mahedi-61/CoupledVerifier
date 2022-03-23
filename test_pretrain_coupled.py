@@ -38,7 +38,7 @@ class VerifTest:
                         batch_size=config.batch_size, 
                         shuffle=False,
                         pin_memory=True,
-                        num_workers= 6)
+                        num_workers= 2)
 
                     ls_sq_dist, ls_labels = self.test()
                     ls_sq_dist = torch.cat(ls_sq_dist, dim=0)

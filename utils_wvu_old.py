@@ -97,19 +97,18 @@ def get_img_dict(photo_path, print_path):
     for finger_id in os.listdir(photo_path):
         id_dir = os.path.join(photo_path, finger_id) 
         
-        #for img_file in os.listdir(id_dir):
-        #photo_finger_dict[index] = [finger_id, os.path.join(id_dir, img_file)]
-        first_f_img = os.path.join(id_dir, os.listdir(id_dir)[0])  
+        #first_f_img = os.path.join(id_dir, os.listdir(id_dir)[0])  
+        first_f_img = [os.path.join(id_dir, img) for img in os.listdir(id_dir)]
+
         photo_finger_dict[index] = [finger_id, first_f_img]
         index += 1
 
         # for finger print
         id_dir = os.path.join(print_path, finger_id)
         if(os.path.isdir(id_dir)):
-            #images_path = [os.path.join(id_dir, img_file) for img_file in os.listdir(id_dir)]
-            #print_finger_dict[finger_id] = [img_path for img_path in images_path]
-            first_f_img = os.path.join(id_dir, os.listdir(id_dir)[0]) 
-            print_finger_dict[finger_id] = [first_f_img]
+            #first_f_img = os.path.join(id_dir, os.listdir(id_dir)[0]) 
+            first_f_img = [os.path.join(id_dir, img) for img in os.listdir(id_dir)]
+            print_finger_dict[finger_id] = first_f_img
     
     return photo_finger_dict, print_finger_dict
 
@@ -339,9 +338,8 @@ if __name__ == "__main__":
     t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
 
-    ph_d, pr_d = get_multiple_img_dict(config.test_photo_dir, 
-                    config.test_print_dir, config.all_fnums)
+    ph_d, pr_d = get_img_dict(config.train_photo_dir, config.train_print_dir)
     
     print(config.train_photo_dir)
-    print(len(ph_d))
-    print(len(pr_d))
+    print(ph_d[0])
+    print(pr_d["nist_00002614_09"])

@@ -23,7 +23,7 @@ class VerifTrain:
             batch_size=config.batch_size, 
             shuffle=False,
             pin_memory=True,
-            num_workers= 6  
+            num_workers= 3  
         )
 
         print("Dataset: ", config.dataset_name)
@@ -82,6 +82,7 @@ class VerifTrain:
             model_file = os.path.join(config.save_w_dir, "best_model_000.pth")
             checkpoint = torch.load(model_file)
 
+            """
             ### remove module
             new_state_dict = OrderedDict()
             for k, v in checkpoint["net_print"].items():
@@ -90,6 +91,10 @@ class VerifTrain:
 
             self.net_photo.module.backbone.load_state_dict(new_state_dict)
             self.net_print.module.backbone.load_state_dict(new_state_dict)
+            """
+
+            self.net_photo.load_state_dict(checkpoint["net_print"])
+            self.net_print.load_state_dict(checkpoint["net_print"])
 
         if config.is_load_model:
             print("loading pretrained model from: ", config.save_w_name)

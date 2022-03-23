@@ -88,7 +88,6 @@ def get_img_dict(photo_path, print_path):
 
         # for finger print
         sub_dir = os.path.join(print_path, sub_id)
-
         if(os.path.isdir(sub_dir)):
             for img_file in os.listdir(sub_dir):
                 finger_id = img_file.split(".")[0]
@@ -191,5 +190,8 @@ def calculate_scores(ls_labels, ls_sq_dist, is_ensemble):
 if __name__ == "__main__":
     #t = [torch.randn(3, 64, 64), torch.randn(3, 64, 64)]
     #a = AverageMeter()
-    ph_dict, pr_dict =  get_multiple_img_dict(config.train_photo_dir, 
-                            config.train_print_dir, [["7", "8"]]) 
+    ph_dict, pr_dict =  get_img_dict(config.train_photo_dir, 
+                            config.train_print_dir) 
+
+    print(len(ph_dict))
+    print(len(pr_dict))

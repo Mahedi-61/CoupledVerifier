@@ -6,22 +6,21 @@ dataset_name = "pretrain" #wvu_new, wvu_old
 photo_type = ""
 if dataset_name == "wvu_new": photo_type = "v" #vfp
 
-is_train = True                                                                                                                                                                                                                                                       
-is_load_model = False                                                                                             
-is_one_fid = False              # train and test only on the finger ID 
+is_train = True                                                                                                                                                                                                                                                           
+is_load_model = False                                                                                              
+is_one_fid = False             # train and test only on the finger ID 
 partial_finetune = False  # only finetuning the last layer of the pretrained model
-is_finetune = True                           
+is_finetune = False                             
 is_convert_one_to_many = False                                                                                    
 num_join_fingers = 1
 
 fnums =  [[""]]                                                                    
-w_name = "bin_F1_D3_A1"  #weight save --> train | weights load --> test
+w_name = "gr_F1_D3_A1"  #weight save --> train | weights load --> test
 
  #weights for initialization
 save_w_name = ""
 conversion_type = ""
-pretrain_type = "bin" #gr, g
-
+pretrain_type = "gr" #gr, g
 
 # for testing 
 is_all_pairs = False                   
@@ -30,7 +29,7 @@ num_test_aug = 2
 is_test_augment = True
 is_ensemble = True                  
 
-load_pretrain_weights = False     
+load_pretrain_weights = False       
 multi_gpus = True  
 img_dim = num_join_fingers
 is_save_model = is_train 
@@ -42,11 +41,11 @@ if is_test_augment == False: num_test_aug = 1
 is_display = True 
 num_imposter = 2
 num_pair_test = 70
-batch_size = 544        
-learning_rate = 0.002
+batch_size = 516           
+learning_rate = 0.0002
 weight_decay = 5e-4
-num_epochs = 550
-start_saving_epoch = 400  
+num_epochs = 1 
+start_saving_epoch = 1  
 
 if is_all_pairs:
     if dataset_name == "wvu_old":
@@ -76,7 +75,7 @@ delta_l1 = 100
 delta_l2 = 1
 delta_gan = 1
 # 65 == wvu_old; wvu_new vfp; 
-margin = 65
+margin = 60
 img_size = 256
 eps = 1e-8
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -91,12 +90,12 @@ if dataset_name == "wvu_old":
     test_dataset =  "amar_clean_r60_as_test" #clean
 
 elif dataset_name == "wvu_new":
-    train_dataset = "wvu_new_train"
+    train_dataset = "bin_finetune"
     test_dataset =  "wvu_new_combine"
 
 elif dataset_name == "pretrain":
     if pretrain_type == "bin": train_dataset = "bin_pretrain" 
-    elif pretrain_type == "gr": train_dataset = "gr_pretrain"  
+    elif pretrain_type == "gr": train_dataset = "groll_pretrain"  
     elif pretrain_type == "g": train_dataset = "g_pretrain" 
     test_dataset = "wvu_new_combine"
 

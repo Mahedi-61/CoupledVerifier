@@ -10,12 +10,14 @@ from  torch.optim.lr_scheduler import ExponentialLR
 
 
 # load dataset: wvu_new, wvu_old
+from utils_wvu_old import get_img_dict, get_multiple_img_dict, plot_tensors
+"""
 if config.dataset_name == "wvu_old":
     from utils_wvu_old import get_img_dict, get_multiple_img_dict
 
 elif config.dataset_name == "wvu_new":
     from utils_wvu_new import get_img_dict, get_multiple_img_dict
-
+"""
 
 class WVUFingerDataset(Dataset):
     def __init__(self, train = True):
@@ -56,7 +58,7 @@ class WVUFingerDataset(Dataset):
 
         if train == True:
             # Resize
-            if random.random() > 0.5:
+            if random.random() > 0.8:
                 resize = transforms.Resize(size=(286, 286))
                 photo = resize(photo)
                 print = resize(print)
@@ -129,17 +131,25 @@ class WVUFingerDataset(Dataset):
                 class_id = list(self.dict_print.keys())[random.randint(0, 
                                             len(self.dict_print) - 1)]  
 
+
+        if len(photo_image) == 1: pos_img1 = 0
+        else: pos_img1 = random.randint(0, len(photo_image) - 1)
+
+        print_image = self.dict_print[class_id]
+        if len(print_image) == 1: pos_img2 = 0
+        else: pos_img2 = random.randint(0, len(print_image) - 1)
+
         # single finger
         if config.num_join_fingers == 1:
-            ph_f = Image.open(photo_image).convert("L")
-            pr_f = Image.open((self.dict_print[class_id])[0]).convert("L")
+            ph_f = Image.open(photo_image[pos_img1]).convert("L")
+            pr_f = Image.open(print_image[pos_img2]).convert("L")
 
             img1, img2 = self.trans(ph_f, pr_f, self.train)
 
+
         # two fingers
         elif config.num_join_fingers >= 2:
-            print_image = self.dict_print[class_id]
-
+            
             ph_f1 = Image.open(photo_image[0]).convert("L") 
             ph_f2 = Image.open(photo_image[1]).convert("L")
             pr_f1 = Image.open(print_image[0]).convert("L") 
@@ -192,7 +202,10 @@ class WVUFingerDataset(Dataset):
 
 if __name__ == "__main__":
     vt = WVUFingerDataset()
-    img1, img2, same_class = vt.__getitem__(90)
-    print(img1.shape)
-    #title = ("genuine pair" if same_class else "imposter pair")
-    #utils_wvu_new.plot_tensors([img1, img2], title) 
+    for i in range(100):
+        img1, img2, same_class = vt.__getitem__(i)
+        
+        """
+        title = ("genuine pair" if same_class else "imposter pair")
+        plot_tensors([img1, img2], title) 
+        """
